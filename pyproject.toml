@@ -1,12 +1,12 @@
 [project]
 name = "demandpulse"
 version = "0.1.0"
-description = "Add your description here"
+description = "Retail revenue and demand intelligence platform on the dunnhumby Let's Get Sort-of-Real dataset"
 readme = "README.md"
 authors = [
     { name = "Nishanth Manoharan", email = "manoharan.ni@northeastern.edu" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "duckdb>=1.5.6",
     "lightgbm>=4.7.0",
