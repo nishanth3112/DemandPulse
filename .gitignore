@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Large datasets and generated outputs
+data/raw/
+data/bronze/
+data/silver/
+data/gold/
+*.parquet
+*.duckdb
+*.duckdb.wal
+artifacts/
+models/
+mlruns/
+
+# System and IDE
+.DS_Store
+.vscode/
