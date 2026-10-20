@@ -1,0 +1,42 @@
+# Public dunnhumby CDN links, scraped from https://www.dunnhumby.com/source-files/ on 2026-10-20.
+# Links are content-addressed; if one stops working, refresh from the page.
+sources:
+  - name: data-sample
+    kind: sample
+    url: https://assets.ctfassets.net/psj0p18eh7z1/6hMvgZ3fymZ3AjcBEl5VOs/9ea7a5015586e348477d70b5d79d0127/dunnhumby_Let-s-Get-Sort-of-Real-_Data-Sample___1_.zip
+  - name: sample-2k-baskets
+    kind: sample
+    url: https://assets.ctfassets.net/psj0p18eh7z1/3uiNHeTTjkQBiZ18vtxaH9/0015bb8a1aaf014c96c6d3cd4183bd7c/dunnhumby_Let-s-Get-Sort-of-Real-_Sample-2K-baskets_.zip
+  - name: sample-50k-customers
+    kind: sample
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/12PzBBsw5BGLhQlhu5qWlT/a645c6913b42d6987ec97c28a2dfce80/dunnhumby_Let-s-Get-Sort-of-Real-_Sample-50K-customers_.zip
+  - name: sample-5k-customers
+    kind: sample
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/jNaTs7q6zDSZGD6Cbu6Sj/f504a08506aa1b7a96fe080b7466046f/dunnhumby_Let-s-Get-Sort-of-Real-_Sample-5K-customers_.zip
+  - name: full-part-1
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/3j59ygNxuo08uBoaRoKtzn/f7f997c074dc39e9fc53908cf7156ec7/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-1-of-9_.zip
+  - name: full-part-2
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/2J5Da60r7WAUoi1UsdHkgi/5e54f6f1b03aea2ba42be81d6e4ae03f/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-2-of-9_.zip
+  - name: full-part-3
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/5dyIcCiWfvA4P6oItiL9ov/ed201e73f66522ba4f64729089d4d684/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-3-of-9_.zip
+  - name: full-part-4
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/6yw7bUtF9Zh4QqiijUN7zn/aa18d19b642e2f205d52f7788db408d4/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-4-of-9_.zip
+  - name: full-part-5
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/68BYBA0oTXmSx596mVK7MA/649c4d4585fb284c320d74df8d8af219/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-5-of-9_.zip
+  - name: full-part-6
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/45SQGkP1Cod8dQuWt45sTy/eda851445d0ba8349af09a7835eff4c7/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-6-of-9_.zip
+  - name: full-part-7
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/1iWjBKhrH59zp6jjrRx8Kx/8dacb3fa8cc57d62850eba028be2bc63/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-7-of-9_.zip
+  - name: full-part-8
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/ZikOgzrwXdFm5HDWtscOB/4a328de519ef4bf5e19125af7e678fec/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-8-of-9_.zip
+  - name: full-part-9
+    kind: full
+    url: https://downloads.ctfassets.net/psj0p18eh7z1/6YlXdBxHzNNsfYKmQJumfh/fdc2617412c27d02d953c6c5a7441f30/dunnhumby_Let-s-Get-Sort-of-Real-_Full-Part-9-of-9_.zip
