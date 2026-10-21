@@ -13,6 +13,7 @@ class Source(BaseModel):
     name: str
     kind: Literal["sample", "full"]
     url: str
+    known_issue: str | None = None
 
 
 def load_sources(path: Path = DEFAULT_REGISTRY) -> dict[str, Source]:

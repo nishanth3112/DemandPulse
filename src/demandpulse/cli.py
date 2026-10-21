@@ -28,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-root", type=Path, help="write to this directory instead of S3")
     parser.add_argument("--sources-file", type=Path, default=DEFAULT_REGISTRY)
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument(
+        "--allow-known-issue",
+        action="store_true",
+        help="process a source the registry marks as defective",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("sources", help="list registered dunnhumby sources")
@@ -64,11 +69,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "sources":
         for source in load_sources(args.sources_file).values():
-            print(f"{source.name:24} {source.kind:7} {source.url}")
+            flag = "  [KNOWN ISSUE]" if source.known_issue else ""
+            print(f"{source.name:24} {source.kind:7} {source.url}{flag}")
         return 0
 
     store = open_store(_settings(args))
     source = get_source(args.source, args.sources_file)
+    if source.known_issue and not args.allow_known_issue:
+        print(f"Refusing {source.name}: {source.known_issue}", file=sys.stderr)
+        return 2
     ok = True
 
     if args.command in {"ingest", "run"}:

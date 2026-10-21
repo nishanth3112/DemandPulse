@@ -56,3 +56,13 @@ def test_unknown_source_is_a_clear_error(sources_file, tmp_path):
     path, _ = sources_file
     with pytest.raises(KeyError, match="Unknown source"):
         run(["ingest", "nope"], path, tmp_path / "lake")
+
+
+def test_known_issue_sources_are_refused_unless_overridden(tmp_path, capsys):
+    path = tmp_path / "sources.yaml"
+    path.write_text(
+        "sources:\n  - name: bad\n    kind: sample\n    url: file:///nowhere.zip\n"
+        '    known_issue: "ids are corrupted"\n'
+    )
+    assert run(["ingest", "bad"], path, tmp_path / "lake") == 2
+    assert "ids are corrupted" in capsys.readouterr().err

@@ -4,12 +4,15 @@ sources:
   - name: data-sample
     kind: sample
     url: https://assets.ctfassets.net/psj0p18eh7z1/6hMvgZ3fymZ3AjcBEl5VOs/9ea7a5015586e348477d70b5d79d0127/dunnhumby_Let-s-Get-Sort-of-Real-_Data-Sample___1_.zip
+    known_issue: "Preview workbook (one .xlsx, 24 KB), not weekly transaction CSVs. Verified 2026-10-21."
   - name: sample-2k-baskets
     kind: sample
     url: https://assets.ctfassets.net/psj0p18eh7z1/3uiNHeTTjkQBiZ18vtxaH9/0015bb8a1aaf014c96c6d3cd4183bd7c/dunnhumby_Let-s-Get-Sort-of-Real-_Sample-2K-baskets_.zip
+    known_issue: "basket_id is stored in scientific notation (e.g. 9.94E+14), so basket identity is unrecoverable. Verified 2026-10-21."
   - name: sample-50k-customers
     kind: sample
     url: https://downloads.ctfassets.net/psj0p18eh7z1/12PzBBsw5BGLhQlhu5qWlT/a645c6913b42d6987ec97c28a2dfce80/dunnhumby_Let-s-Get-Sort-of-Real-_Sample-50K-customers_.zip
+    known_issue: "basket_id is stored in scientific notation (e.g. 9.94E+14), so basket identity is unrecoverable. Verified 2026-10-21 on week 200607 (all 250,546 rows)."
   - name: sample-5k-customers
     kind: sample
     url: https://downloads.ctfassets.net/psj0p18eh7z1/jNaTs7q6zDSZGD6Cbu6Sj/f504a08506aa1b7a96fe080b7466046f/dunnhumby_Let-s-Get-Sort-of-Real-_Sample-5K-customers_.zip
