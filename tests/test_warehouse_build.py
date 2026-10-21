@@ -4,6 +4,7 @@ import duckdb
 import pytest
 
 from demandpulse.warehouse.build import (
+    STEPS,
     Export,
     GoldConfig,
     Step,
@@ -95,3 +96,45 @@ def test_statement_splitter_ignores_semicolons_in_comments():
 
     sql = "-- a note; with a semicolon\nCREATE TABLE a AS SELECT 1; -- trailing; note\nSELECT 2"
     assert _statements(sql) == ["CREATE TABLE a AS SELECT 1", "SELECT 2"]
+
+
+def test_weekly_step_runs_once_per_week_against_that_weeks_silver_only(
+    config, tmp_path, silver_frame
+):
+    init = tmp_path / "init.sql"
+    init.write_text("CREATE OR REPLACE TABLE wk (shop_week INTEGER, n BIGINT)")
+    weekly = tmp_path / "weekly.sql"
+    weekly.write_text("INSERT INTO wk SELECT $week, count(*) FROM read_parquet('$silver_week')")
+    step = Step("wk", str(init), (Export("wk"),), weekly_sql_file=str(weekly))
+
+    result = build_gold(config, steps=(*STEPS[:2], step))
+
+    gold_file = config.work_dir.parent / "lake" / "gold" / "wk.parquet"
+    rows = dict(duckdb.sql(f"SELECT shop_week, n FROM '{gold_file}'").fetchall())
+    expected = dict(silver_frame.group_by("shop_week").len().iter_rows())
+    assert rows == expected
+    assert result.tables["wk"] == 8
+
+
+def test_resume_reuses_existing_tables_instead_of_recomputing(silver_lake, tmp_path):
+    sql = tmp_path / "r.sql"
+    sql.write_text("CREATE OR REPLACE TABLE r AS SELECT random() AS v")
+    step = Step("r", str(sql), (Export("r"),))
+
+    def build(resume: bool) -> float:
+        cfg = GoldConfig(
+            lake_root=str(silver_lake),
+            source_glob="fixture",
+            window_weeks=2,
+            year_weeks=4,
+            work_dir=tmp_path / "work",
+            threads=2,
+            memory_limit="1GB",
+            resume=resume,
+        )
+        build_gold(cfg, steps=(step,))
+        return duckdb.sql(f"SELECT v FROM '{silver_lake}/gold/r.parquet'").fetchone()[0]
+
+    first = build(resume=False)
+    assert build(resume=True) == first
+    assert build(resume=False) != first

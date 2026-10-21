@@ -83,4 +83,12 @@ SELECT
     min(shop_week) AS first_week,
     max(shop_week) AS last_week
 FROM silver
-GROUP BY prod_code
+GROUP BY prod_code;
+
+-- Weeks belonging to each comparison window, so marts can join on shop_week.
+CREATE OR REPLACE TABLE dim_comparison_week AS
+SELECT c.comparison, 'current' AS period, d.shop_week, d.week_idx
+FROM dim_comparison c JOIN dim_date d ON d.week_idx BETWEEN c.current_from AND c.current_to
+UNION ALL
+SELECT c.comparison, 'base' AS period, d.shop_week, d.week_idx
+FROM dim_comparison c JOIN dim_date d ON d.week_idx BETWEEN c.base_from AND c.base_to

@@ -36,6 +36,9 @@ class Step:
     name: str
     sql_file: str
     exports: tuple[Export, ...] = ()
+    # When set, sql_file only creates the (empty) tables and this file is run once per week
+    # with $week and $silver_week filled in, keeping memory bounded on the full dataset.
+    weekly_sql_file: str | None = None
 
 
 # Always run first: every other step and the manifest read the `silver` view.
@@ -50,6 +53,7 @@ STEPS: tuple[Step, ...] = (
         (
             Export("dim_date"),
             Export("dim_comparison"),
+            Export("dim_comparison_week"),
             Export("dim_store"),
             Export("dim_customer"),
             Export("dim_product"),
@@ -59,6 +63,21 @@ STEPS: tuple[Step, ...] = (
         "store_week_and_mix",
         "20_store_week_and_basket_marts.sql",
         (Export("fct_store_week"), Export("mart_basket_mix"), Export("mart_trading_pattern")),
+    ),
+    Step(
+        "store_category_week",
+        "30_store_category_week_init.sql",
+        (Export("fct_store_category_week"),),
+        weekly_sql_file="30_store_category_week_weekly.sql",
+    ),
+    Step(
+        "category_and_region",
+        "31_category_and_region_marts.sql",
+        (
+            Export("mart_category_benchmark"),
+            Export("mart_region_benchmark"),
+            Export("mart_region_category_mix"),
+        ),
     ),
 )
 
@@ -74,6 +93,9 @@ class GoldConfig:
     work_dir: Path = DEFAULT_WORK_DIR
     memory_limit: str = "8GB"
     threads: int = 8
+    # Skip a step's SQL when its tables already exist in the scratch database. Only safe when
+    # Silver has not changed since they were built; exports are always redone.
+    resume: bool = False
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_*.\-]+", self.source_glob):
@@ -84,6 +106,10 @@ class GoldConfig:
     @property
     def silver_pattern(self) -> str:
         return f"{self.lake_root}/silver/source={self.source_glob}/shop_week=*/part-0.parquet"
+
+    def silver_week_pattern(self, week: int) -> str:
+        source = f"{self.lake_root}/silver/source={self.source_glob}"
+        return f"{source}/shop_week={int(week)}/part-0.parquet"
 
     @property
     def gold_prefix(self) -> str:
@@ -138,6 +164,27 @@ def run_sql_file(con: duckdb.DuckDBPyConnection, config: GoldConfig, sql_file: s
         con.execute(statement)
 
 
+def run_weekly_sql(con: duckdb.DuckDBPyConnection, config: GoldConfig, sql_file: str) -> None:
+    template = Template((SQL_DIR / sql_file).read_text())
+    weeks = [row[0] for row in con.execute("SELECT shop_week FROM dim_date ORDER BY 1").fetchall()]
+    for week in weeks:
+        values = {
+            **config.template_values(),
+            "week": int(week),
+            "silver_week": config.silver_week_pattern(week),
+        }
+        for statement in _statements(template.substitute(values)):
+            con.execute(statement)
+    logger.info("weekly SQL %s ran for %d weeks", sql_file, len(weeks))
+
+
+def _table_exists(con: duckdb.DuckDBPyConnection, table: str) -> bool:
+    found = con.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = ?", [table]
+    ).fetchone()
+    return bool(found and found[0])
+
+
 def export_table(con: duckdb.DuckDBPyConnection, config: GoldConfig, export: Export) -> int:
     rows = con.execute(f"SELECT count(*) FROM {export.table}").fetchone()
     count = int(rows[0]) if rows else 0
@@ -179,7 +226,18 @@ def build_gold(
             if only is not None and step.name not in only and step is not SILVER_VIEW:
                 continue
             started = time.monotonic()
-            run_sql_file(con, config, step.sql_file)
+            can_resume = (
+                config.resume
+                and step is not SILVER_VIEW
+                and step.exports
+                and all(_table_exists(con, e.table) for e in step.exports)
+            )
+            if can_resume:
+                logger.info("resume: reusing existing tables for step %s", step.name)
+            else:
+                run_sql_file(con, config, step.sql_file)
+                if step.weekly_sql_file:
+                    run_weekly_sql(con, config, step.weekly_sql_file)
             for export in step.exports:
                 result.tables[export.table] = export_table(con, config, export)
             result.seconds[step.name] = round(time.monotonic() - started, 1)
