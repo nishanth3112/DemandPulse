@@ -55,6 +55,11 @@ STEPS: tuple[Step, ...] = (
             Export("dim_product"),
         ),
     ),
+    Step(
+        "store_week_and_mix",
+        "20_store_week_and_basket_marts.sql",
+        (Export("fct_store_week"), Export("mart_basket_mix"), Export("mart_trading_pattern")),
+    ),
 )
 
 
