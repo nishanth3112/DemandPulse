@@ -2,11 +2,13 @@ import duckdb
 import polars as pl
 import pytest
 
-import demandpulse
+from demandpulse import cli
 
 
-def test_package_exposes_cli_entrypoint(capsys):
-    demandpulse.main()
+def test_cli_reports_version(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["--version"])
+    assert exit_info.value.code == 0
     assert capsys.readouterr().out.startswith("demandpulse ")
 
 
