@@ -27,3 +27,4 @@ mlruns/
 # System and IDE
 .DS_Store
 .vscode/
+data/work/

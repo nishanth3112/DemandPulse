@@ -62,3 +62,20 @@ def week_csv():
 @pytest.fixture
 def calendar_csv():
     return CALENDAR
+
+
+@pytest.fixture(scope="session")
+def silver_frame():
+    from silver_factory import build_silver_frame
+
+    return build_silver_frame()
+
+
+@pytest.fixture
+def silver_lake(tmp_path, silver_frame):
+    """A local lake holding the synthetic Silver data; returns its root directory."""
+    from silver_factory import write_silver_lake
+
+    root = tmp_path / "lake"
+    write_silver_lake(root, silver_frame)
+    return root
