@@ -42,7 +42,8 @@ def test_build_writes_manifest_with_silver_totals(config, silver_frame):
     assert manifest["silver_weeks"] == 8
     assert manifest["silver_first_week"] == 200607
     assert manifest["window_weeks"] == 2
-    assert result.tables == {}  # no marts yet; only the manifest is written
+    assert manifest["tables"] == result.tables
+    assert result.tables["fct_basket"] == silver_frame["basket_id"].n_unique()
 
 
 def test_exports_land_as_parquet(config, tmp_path):
@@ -87,3 +88,10 @@ def test_unsafe_source_globs_are_rejected(tmp_path, glob):
 def test_window_must_fit_in_year(tmp_path):
     with pytest.raises(ValueError, match="window_weeks"):
         GoldConfig(lake_root=str(tmp_path), window_weeks=10, year_weeks=4)
+
+
+def test_statement_splitter_ignores_semicolons_in_comments():
+    from demandpulse.warehouse.build import _statements
+
+    sql = "-- a note; with a semicolon\nCREATE TABLE a AS SELECT 1; -- trailing; note\nSELECT 2"
+    assert _statements(sql) == ["CREATE TABLE a AS SELECT 1", "SELECT 2"]

@@ -42,14 +42,27 @@ class Step:
 SILVER_VIEW = Step("silver_view", "00_silver_view.sql")
 
 # Order matters: later steps read tables created by earlier ones.
-STEPS: tuple[Step, ...] = ()
+STEPS: tuple[Step, ...] = (
+    Step("fct_basket", "10_fct_basket.sql", (Export("fct_basket", partition_by="shop_week"),)),
+    Step(
+        "dimensions",
+        "11_dimensions.sql",
+        (
+            Export("dim_date"),
+            Export("dim_comparison"),
+            Export("dim_store"),
+            Export("dim_customer"),
+            Export("dim_product"),
+        ),
+    ),
+)
 
 
 @dataclass(frozen=True)
 class GoldConfig:
     lake_root: str
     source_glob: str = "full-part-*"
-    window_weeks: int = 52
+    window_weeks: int = 13
     year_weeks: int = 52
     aws_profile: str | None = None
     aws_region: str = "us-east-1"
@@ -108,8 +121,10 @@ def connect(config: GoldConfig) -> duckdb.DuckDBPyConnection:
 
 
 def _statements(sql: str) -> list[str]:
-    # SQL files never contain ';' inside string literals, so a plain split is safe.
-    return [s.strip() for s in sql.split(";") if s.strip()]
+    # Comments are stripped first so a ';' inside one cannot split a statement. SQL files never
+    # contain '--' or ';' inside string literals, so plain text handling is safe.
+    without_comments = re.sub(r"--[^\n]*", "", sql)
+    return [s.strip() for s in without_comments.split(";") if s.strip()]
 
 
 def run_sql_file(con: duckdb.DuckDBPyConnection, config: GoldConfig, sql_file: str) -> None:

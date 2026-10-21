@@ -79,3 +79,52 @@ def silver_lake(tmp_path, silver_frame):
     root = tmp_path / "lake"
     write_silver_lake(root, silver_frame)
     return root
+
+
+class GoldHandle:
+    """Query the exported Gold marts of a built fixture lake with plain SQL."""
+
+    def __init__(self, root):
+        import duckdb
+
+        self.root = root
+        self.con = duckdb.connect()
+        gold = root / "gold"
+        for item in sorted(gold.iterdir()):
+            if item.suffix == ".parquet":
+                self.con.execute(
+                    f"CREATE VIEW {item.stem} AS SELECT * FROM read_parquet('{item.as_posix()}')"
+                )
+            elif item.is_dir():
+                pattern = f"{item.as_posix()}/**/*.parquet"
+                self.con.execute(
+                    f"CREATE VIEW {item.name} AS "
+                    f"SELECT * FROM read_parquet('{pattern}', hive_partitioning=true)"
+                )
+
+    def sql(self, query: str):
+        return self.con.execute(query).fetchall()
+
+    def one(self, query: str):
+        return self.con.execute(query).fetchone()[0]
+
+
+@pytest.fixture(scope="session")
+def gold(tmp_path_factory, silver_frame):
+    """Build every Gold mart once over the synthetic Silver data (window 2, year 4)."""
+    from demandpulse.warehouse.build import GoldConfig, build_gold
+    from silver_factory import write_silver_lake
+
+    root = tmp_path_factory.mktemp("gold_lake")
+    write_silver_lake(root, silver_frame)
+    config = GoldConfig(
+        lake_root=str(root),
+        source_glob="fixture",
+        window_weeks=2,
+        year_weeks=4,
+        work_dir=tmp_path_factory.mktemp("gold_work"),
+        threads=2,
+        memory_limit="1GB",
+    )
+    build_gold(config)
+    return GoldHandle(root)
