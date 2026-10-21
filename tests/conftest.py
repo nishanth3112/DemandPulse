@@ -57,3 +57,8 @@ def make_zip(tmp_path):
 @pytest.fixture
 def week_csv():
     return transactions_csv
+
+
+@pytest.fixture
+def calendar_csv():
+    return CALENDAR
