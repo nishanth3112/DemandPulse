@@ -48,6 +48,8 @@ class SilverManifest(BaseModel):
     rows_in: int
     rows_out: int
     duplicates_dropped: int
+    duplicate_quantity_dropped: int = 0
+    duplicate_spend_dropped: Decimal = Decimal(0)
     quantity_sum: int
     spend_sum: Decimal
     built_at: datetime
@@ -62,6 +64,10 @@ class SilverReport(BaseModel):
     @property
     def ok(self) -> bool:
         return not self.failed
+
+
+def _decimal(value: object) -> Decimal:
+    return Decimal(str(value)) if value is not None else Decimal(0)
 
 
 def _blank_to_null(column: str) -> pl.Expr:
@@ -123,6 +129,7 @@ def build_silver(source: str, store: Store, *, weeks: set[int] | None = None) ->
             key = silver_key(source, week)
             store.write_bytes(key, buffer.getvalue())
             spend = silver["spend"].sum()
+            bronze_spend = frame["spend"].sum()
             manifest = SilverManifest(
                 source=source,
                 shop_week=week,
@@ -131,8 +138,10 @@ def build_silver(source: str, store: Store, *, weeks: set[int] | None = None) ->
                 rows_in=frame.height,
                 rows_out=silver.height,
                 duplicates_dropped=dropped,
+                duplicate_quantity_dropped=int(frame["quantity"].sum() - silver["quantity"].sum()),
+                duplicate_spend_dropped=_decimal(bronze_spend) - _decimal(spend),
                 quantity_sum=int(silver["quantity"].sum()),
-                spend_sum=Decimal(spend) if spend is not None else Decimal(0),
+                spend_sum=_decimal(spend),
                 built_at=datetime.now(UTC),
             )
             store.write_bytes(
