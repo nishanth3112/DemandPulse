@@ -79,6 +79,7 @@ STEPS: tuple[Step, ...] = (
             Export("mart_region_category_mix"),
         ),
     ),
+    Step("store_scorecard", "40_store_scorecard.sql", (Export("mart_store_scorecard"),)),
 )
 
 
