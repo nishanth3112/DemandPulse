@@ -21,7 +21,7 @@ data/gold/
 *.duckdb
 *.duckdb.wal
 artifacts/
-models/
+/models/
 mlruns/
 
 # System and IDE
