@@ -10,8 +10,8 @@ The dataset is synthetic and historical. Results describe the dataset and histor
 |---|---|---|
 | 0 | Repository foundation and CI | merged |
 | 1 | Data engineering and quality | merged |
-| 2 | SQL analytics and business KPIs | in review |
-| 3 | Forecasting and model evaluation | planned |
+| 2 | SQL analytics and business KPIs | merged |
+| 3 | Forecasting and model evaluation | in review |
 | 4 | Revenue risk and decision intelligence | planned |
 | 5 | Streamlit dashboard | planned |
 | 6 | Production hardening and release | planned |
@@ -47,6 +47,20 @@ Dimensions (date, store, product hierarchy, customer) and marts for store and ca
 regional and peer benchmarking, like-for-like growth, customer RFM and cohorts, basket mix and
 revenue variance decomposition. KPI definitions, method notes and results are in
 [docs/gold-layer.md](docs/gold-layer.md).
+
+## Forecasting
+
+```bash
+uv run demandpulse forecast prepare              # weekly store x category panel from Gold
+uv run demandpulse forecast backtest all --run main
+uv run demandpulse forecast report --run main
+```
+
+Eight forecasters (seasonal naive, trailing mean, ETS, Holt-Winters, global LightGBM,
+NeuralProphet, Greykite and equal-weight ensembles) are compared on identical series, cutoffs and
+a 13-week horizon, with leakage guards and bootstrap confidence intervals. NeuralProphet and
+Greykite run in their own locked environments under `envs/`. Method, results and caveats are in
+[docs/forecasting.md](docs/forecasting.md).
 
 ## Stack
 
@@ -85,6 +99,8 @@ Work happens on one branch per phase, merged to `main` through a pull request af
 src/demandpulse/   settings, storage, CLI, quality checks, hygiene guard
 src/demandpulse/ingest/   source registry, remote zip reader, Bronze and Silver
 src/demandpulse/warehouse/   DuckDB runner, SQL marts (sql/), validation checks
+src/demandpulse/forecasting/   panel, metrics, backtest harness, models, runner and report
+envs/              isolated locked environments for NeuralProphet and Greykite
 config/            dunnhumby source registry
 docs/              pipeline and Gold layer documentation
 tests/             unit tests (CI) and opt-in integration tests

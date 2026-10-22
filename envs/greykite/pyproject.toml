@@ -1,0 +1,14 @@
+# Isolated environment for Greykite / Silverkite. Greykite 1.1.0 pins pandas 1.5.3, numpy 1.26
+# and scikit-learn 1.3, which have no Python 3.12 wheels, so it runs on Python 3.10 here and
+# exchanges Parquet files with the main package.
+[project]
+name = "demandpulse-greykite-env"
+version = "0.1.0"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "greykite==1.1.0",
+    "pyarrow>=12,<15",
+]
+
+[tool.uv]
+package = false

@@ -130,3 +130,10 @@ def gold(tmp_path_factory, silver_frame):
     handle = GoldHandle(root)
     handle.config = config
     return handle
+
+
+@pytest.fixture(scope="session")
+def forecast_panel(gold):
+    from demandpulse.forecasting.panel import build_panel
+
+    return build_panel(gold.config)

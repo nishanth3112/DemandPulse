@@ -89,3 +89,38 @@ def test_gold_validate_fails_when_nothing_was_built(silver_lake, tmp_path):
     ]  # fmt: skip
     with pytest.raises(FileNotFoundError, match="build Gold first"):
         cli.main(args)
+
+
+def test_forecast_backtest_and_report_run_from_saved_inputs(tmp_path, capsys):
+    from demandpulse.forecasting.panel import representative_subset
+    from demandpulse.forecasting.runner import save_inputs
+    from demandpulse.storage import LocalStore
+    from forecast_data import make_seasonal_panel
+
+    lake = tmp_path / "lake"
+    panel = make_seasonal_panel()
+    save_inputs(LocalStore(lake), panel, representative_subset(panel, per_stratum=2))
+    base = ["--local-root", str(lake), "forecast"]
+
+    assert cli.main([*base, "backtest", "seasonal_naive", "trailing_mean_13", "--run", "t"]) == 0
+    assert cli.main([*base, "report", "--run", "t"]) == 0
+
+    out = capsys.readouterr().out
+    assert "# Forecast model comparison: run `t`" in out
+    assert (lake / "forecast" / "runs" / "t" / "report.md").exists()
+    assert (lake / "forecast" / "runs" / "t" / "forecasts" / "seasonal_naive.parquet").exists()
+
+
+def test_forecast_prepare_explains_when_the_data_is_too_short(silver_lake, tmp_path):
+    gold_args = [
+        "--local-root", str(silver_lake), "gold", "build",
+        "--source-glob", "fixture", "--window-weeks", "2", "--year-weeks", "4",
+        "--work-dir", str(tmp_path / "work"), "--threads", "2", "--memory-limit", "1GB",
+    ]  # fmt: skip
+    assert cli.main(gold_args) == 0
+    prepare = [
+        "--local-root", str(silver_lake), "forecast", "prepare",
+        "--source-glob", "fixture", "--work-dir", str(tmp_path / "work"),
+    ]  # fmt: skip
+    with pytest.raises(ValueError, match="No series are eligible"):
+        cli.main(prepare)
