@@ -47,8 +47,9 @@ NUMERIC_FEATURES_V1 = [
     "store_log_scale",
 ]
 # v2 adds seasonally adjusted momentum (recent revenue against the same weeks a year earlier) at
-# series, category and network level, and medians that a single abnormal week cannot move. They
-# were added after v1 treated a one-week dip at the final origin as a change of level.
+# series, category and network level, and medians. It was designed after v1 under-forecast at the
+# final origin. On the two origins not used to design it (85 and 98) it was not better than v1
+# (18.9% against 18.6% WAPE), so v1 is the adopted feature set and v2 is kept as an ablation.
 NUMERIC_FEATURES_V2_EXTRA = [
     "median4",
     "median13",

@@ -10,6 +10,7 @@ from demandpulse.config import Settings
 from demandpulse.forecasting.panel import ORIGINS, build_panel
 from demandpulse.forecasting.runner import (
     ALL_MODELS,
+    combine_run,
     load_inputs,
     prepare_subset,
     run_model,
@@ -99,8 +100,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     backtest.add_argument("--workers", type=int, default=8)
     backtest.add_argument("--options", default="{}", help="JSON options for neuralprophet/greykite")
+    combine = forecast_commands.add_parser(
+        "combine", help="save an equal-weight average of models already in a run"
+    )
+    combine.add_argument("name")
+    combine.add_argument("components", nargs="+")
+    combine.add_argument("--run", default="default")
+    combine.add_argument("--note", default="")
     report = forecast_commands.add_parser("report", help="write the model comparison report")
     report.add_argument("--run", default="default")
+    report.add_argument(
+        "--origins", help=f"origins in the run, default {','.join(map(str, ORIGINS))}"
+    )
     return parser
 
 
@@ -172,7 +183,14 @@ def _run_forecast(args: argparse.Namespace) -> int:
             logger.info("saved %s (%s scope) to run %s", name, model_run.scope, args.run)
         return 0
 
-    text, _ = write_report(store, args.run, panel, subset)
+    if args.forecast_command == "combine":
+        combined = combine_run(store, args.run, args.name, args.components, args.note)
+        save_run(store, args.run, combined)
+        logger.info("saved %s (average of %s)", args.name, ", ".join(args.components))
+        return 0
+
+    origins = tuple(int(o) for o in args.origins.split(",")) if args.origins else ORIGINS
+    text, _ = write_report(store, args.run, panel, subset, origins)
     print(text)
     return 0
 

@@ -14,7 +14,12 @@ from typing import Any
 
 import polars as pl
 
-from demandpulse.forecasting.backtest import BacktestResult, Forecaster, run_backtest
+from demandpulse.forecasting.backtest import (
+    BacktestResult,
+    Forecaster,
+    ForecastError,
+    run_backtest,
+)
 from demandpulse.forecasting.models.baselines import SeasonalNaive, TrailingMean
 from demandpulse.forecasting.models.ets import ets_damped, holt_winters
 from demandpulse.forecasting.models.isolated import greykite, neuralprophet
@@ -23,6 +28,7 @@ from demandpulse.forecasting.panel import (
     HORIZON,
     ORIGINS,
     SERIES_KEY,
+    YEAR_WEEKS,
     Subset,
     eligible_series,
     representative_subset,
@@ -40,19 +46,20 @@ from demandpulse.storage import Store
 logger = logging.getLogger(__name__)
 
 BASELINE = "seasonal_naive"
-FULL_SCOPE_MODELS = ("seasonal_naive", "trailing_mean_13", "lightgbm", "lightgbm_v1")
+FULL_SCOPE_MODELS = ("seasonal_naive", "trailing_mean_13", "lightgbm", "lightgbm_v2")
 ALL_MODELS = (
     "seasonal_naive",
     "trailing_mean_13",
     "ets_damped",
     "holt_winters",
     "lightgbm",
-    "lightgbm_v1",
+    "lightgbm_v2",
     "neuralprophet",
     "greykite",
 )
 # Holt-Winters needs two full seasons (104 weeks) of history.
 MODEL_ORIGINS = {"holt_winters": (104,)}
+TWO_SEASONS = 2 * YEAR_WEEKS
 
 
 def run_prefix(run: str) -> str:
@@ -98,8 +105,8 @@ def make_model(name: str, panel: pl.DataFrame, workers: int, options: dict[str, 
         return ets_damped(workers=workers)
     if name == "holt_winters":
         return holt_winters(workers=workers)
-    if name in ("lightgbm", "lightgbm_v1"):
-        feature_set = "v2" if name == "lightgbm" else "v1"
+    if name in ("lightgbm", "lightgbm_v2"):
+        feature_set = "v1" if name == "lightgbm" else "v2"
         return LightGBMGlobal(panel, eligible, num_threads=max(workers, 1), feature_set=feature_set)
     if name == "neuralprophet":
         return neuralprophet(options)
@@ -132,6 +139,13 @@ def run_model(
 
         def series_for_origin(origin: int) -> pl.DataFrame:
             return eligible_series(panel, origin)
+    elif name == "holt_winters":
+
+        def series_for_origin(origin: int) -> pl.DataFrame:
+            # Stores that opened later lack two full years of history, which the seasonal fit
+            # requires. They are left out and the number is recorded, not silently dropped.
+            enough = eligible_series(panel, origin, min_history=TWO_SEASONS).select(SERIES_KEY)
+            return subset.series.select(SERIES_KEY).join(enough, on=SERIES_KEY)
     else:
 
         def series_for_origin(origin: int) -> pl.DataFrame:
@@ -151,6 +165,9 @@ def run_model(
             for o in chosen
         },
     }
+    covered = max(info["series_per_origin"].values())
+    if scope == "subset" and covered < subset.series.height:
+        info["subset_series_excluded"] = subset.series.height - covered
     if hasattr(model, "fit_info"):
         info["fit_info"] = {str(k): v for k, v in model.fit_info.items()}
     if hasattr(model, "fallbacks"):
@@ -184,6 +201,56 @@ def load_run(
     return pl.concat(forecasts), pl.concat(scales).unique(), meta
 
 
+def combine_run(
+    store: Store, run: str, name: str, components: list[str], note: str = ""
+) -> ModelRun:
+    """Equal-weight average of already-computed model forecasts, saved as a new model.
+
+    No weights are fitted. The components must cover exactly the same series, origins and weeks.
+    """
+    if len(components) < 2:
+        raise ValueError("A combination needs at least two component models")
+    prefix = run_prefix(run)
+    frames, scales, scopes = [], [], []
+    for component in components:
+        key = f"{prefix}/forecasts/{component}.parquet"
+        if not store.exists(key):
+            raise FileNotFoundError(f"Component {component!r} has no forecasts in run {run!r}")
+        frames.append(_read(store, key).drop("model"))
+        scales.append(_read(store, f"{prefix}/scales/{component}.parquet"))
+        scopes.append(json.loads(store.read_bytes(f"{prefix}/meta/{component}.json"))["scope"])
+
+    keys = ["origin", *SERIES_KEY, "horizon", "week_idx"]
+    base = frames[0].select(*keys, "y")
+    averaged = pl.concat(frames).group_by(keys).agg(pl.col("y_hat").mean(), pl.len().alias("count"))
+    if averaged.height != base.height or (averaged["count"] != len(components)).any():
+        raise ForecastError(f"{name}: components do not cover identical series, origins and weeks")
+    combined = (
+        base.join(averaged.select(*keys, "y_hat"), on=keys)
+        .with_columns(pl.lit(name).alias("model"))
+        .select("model", "origin", *SERIES_KEY, "horizon", "week_idx", "y", "y_hat")
+    )
+    origins = sorted(combined["origin"].unique().to_list())
+    info: dict[str, Any] = {
+        "model": name,
+        "scope": "subset" if "subset" in scopes else "full",
+        "origins": origins,
+        "horizon": HORIZON,
+        "seconds": {},
+        "series_per_origin": {
+            str(o): int(combined.filter(pl.col("origin") == o).select(SERIES_KEY).unique().height)
+            for o in origins
+        },
+        "components": components,
+        "method": "equal-weight mean of component forecasts",
+        "note": note,
+    }
+    result = BacktestResult(
+        model=name, forecasts=combined, scales=pl.concat(scales).unique(), seconds={}
+    )
+    return ModelRun(name=name, scope=str(info["scope"]), result=result, info=info)
+
+
 def _restrict(forecasts: pl.DataFrame, series: pl.DataFrame) -> pl.DataFrame:
     return forecasts.join(series.select(SERIES_KEY), on=SERIES_KEY)
 
@@ -193,26 +260,43 @@ def summary_tables(
     scales: pl.DataFrame,
     panel: pl.DataFrame,
     subset: Subset,
+    meta: dict[str, dict[str, Any]] | None = None,
+    origins: tuple[int, ...] = ORIGINS,
 ) -> dict[str, pl.DataFrame]:
     """Every table the report shows, as frames (also used for the JSON summary)."""
     on_subset = _restrict(forecasts, subset.series)
-    final_origin = max(ORIGINS)
+    final_origin = max(origins)
     tables: dict[str, pl.DataFrame] = {}
 
-    common = on_subset.filter(pl.col("origin") == final_origin)
+    at_final = on_subset.filter(pl.col("origin") == final_origin)
+    coverage = at_final.group_by("model").agg(pl.struct(SERIES_KEY).n_unique().alias("n"))
+    partial = [r["model"] for r in coverage.iter_rows(named=True) if r["n"] < subset.series.height]
+    # Models that could not forecast every subset series get their own like-for-like table.
+    common = at_final.filter(~pl.col("model").is_in(partial))
     tables["subset_final_origin"] = leaderboard(common, scales)
     tables["subset_final_origin_vs_baseline"] = paired_vs_baseline(common, BASELINE)
+    for model in partial:
+        covered = at_final.filter(pl.col("model") == model).select(SERIES_KEY).unique()
+        same_series = at_final.join(covered, on=SERIES_KEY)
+        tables[f"subset_final_origin_{model}_series"] = leaderboard(same_series, scales)
+        tables[f"subset_final_origin_{model}_series_vs_baseline"] = paired_vs_baseline(
+            same_series, BASELINE
+        )
 
     origin_sets = on_subset.group_by("model").agg(pl.col("origin").unique().sort().alias("o"))
     full_origin_models = [
-        row["model"] for row in origin_sets.iter_rows(named=True) if set(row["o"]) >= set(ORIGINS)
+        row["model"] for row in origin_sets.iter_rows(named=True) if set(row["o"]) >= set(origins)
     ]
     rolling = on_subset.filter(pl.col("model").is_in(full_origin_models))
     tables["subset_rolling"] = leaderboard(rolling, scales)
     tables["subset_rolling_vs_baseline"] = paired_vs_baseline(rolling, BASELINE)
     tables["subset_by_origin"] = leaderboard(rolling, scales, ["model", "origin"])
 
-    full_models = [m for m in FULL_SCOPE_MODELS if m in set(forecasts["model"])]
+    present = set(forecasts["model"])
+    if meta is None:
+        full_models = [m for m in FULL_SCOPE_MODELS if m in present]
+    else:
+        full_models = [m for m in present if meta.get(m, {}).get("scope") == "full"]
     full = forecasts.filter(pl.col("model").is_in(full_models))
     if full.height:
         tables["full_by_origin"] = leaderboard(full, scales, ["model", "origin"])
@@ -233,14 +317,15 @@ def render_report(
     meta: dict[str, dict[str, Any]],
     panel: pl.DataFrame,
     subset: Subset,
+    origins: tuple[int, ...] = ORIGINS,
 ) -> str:
     n_series = panel.select(SERIES_KEY).unique().height
-    windows = ", ".join(f"{o + 1}-{o + HORIZON}" for o in ORIGINS)
+    windows = ", ".join(f"{o + 1}-{o + HORIZON}" for o in origins)
     lines = [
         f"# Forecast model comparison: run `{run}`",
         "",
         "Weekly revenue per store x category (product hierarchy level 30). Forecast horizon "
-        f"{HORIZON} weeks from rolling origins at weeks {', '.join(map(str, ORIGINS))} of the "
+        f"{HORIZON} weeks from rolling origins at weeks {', '.join(map(str, origins))} of the "
         f"117 data weeks (test windows weeks {windows}). "
         "Models see only revenue up to the origin. Negative forecasts are clipped to zero "
         "for every model.",
@@ -263,7 +348,18 @@ def render_report(
         "subset_final_origin_vs_baseline",
         ("improvement", "ci_low", "ci_high", "win_rate"),
     )
-    section("Subset, three rolling origins pooled", "subset_rolling")
+    for key in sorted(
+        k for k in tables if k.startswith("subset_final_origin_") and k.endswith("_series")
+    ):
+        model = key.removeprefix("subset_final_origin_").removesuffix("_series")
+        count = tables[key]["series"].max()
+        section(f"Subset, final origin, the {count} series {model} could forecast", key)
+        section(
+            f"Improvement over seasonal naive on those {count} series",
+            f"{key}_vs_baseline",
+            ("improvement", "ci_low", "ci_high", "win_rate"),
+        )
+    section("Subset, all rolling origins pooled", "subset_rolling")
     section(
         "Improvement over seasonal naive, subset rolling origins",
         "subset_rolling_vs_baseline",
@@ -290,6 +386,13 @@ def render_report(
             f"- **{name}** ({info['scope']} scope, origins {info['origins']}): "
             f"series per origin {info['series_per_origin']}, seconds {info['seconds']}"
         )
+        if "components" in info:
+            lines.append(f"  - {info['method']} of {', '.join(info['components'])}. {info['note']}")
+        if "subset_series_excluded" in info:
+            lines.append(
+                f"  - {info['subset_series_excluded']} subset series excluded "
+                "(stores opened too recently for this model's history requirement)"
+            )
         if "ets_fallbacks" in info:
             fallbacks = info["ets_fallbacks"]
             lines.append(f"  - fits {info['ets_fits']}, trailing-mean fallbacks {fallbacks}")
@@ -305,11 +408,15 @@ def render_report(
 
 
 def write_report(
-    store: Store, run: str, panel: pl.DataFrame, subset: Subset
+    store: Store,
+    run: str,
+    panel: pl.DataFrame,
+    subset: Subset,
+    origins: tuple[int, ...] = ORIGINS,
 ) -> tuple[str, dict[str, pl.DataFrame]]:
     forecasts, scales, meta = load_run(store, run)
-    tables = summary_tables(forecasts, scales, panel, subset)
-    text = render_report(run, tables, meta, panel, subset)
+    tables = summary_tables(forecasts, scales, panel, subset, meta, origins)
+    text = render_report(run, tables, meta, panel, subset, origins)
     prefix = run_prefix(run)
     store.write_bytes(f"{prefix}/report.md", text.encode())
     summary = {name: table.to_dicts() for name, table in tables.items()}

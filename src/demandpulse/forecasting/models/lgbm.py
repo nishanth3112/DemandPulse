@@ -62,13 +62,13 @@ class LightGBMGlobal:
         early_stopping_rounds: int = 30,
         num_threads: int = 8,
         seed: int = 20061,
-        feature_set: str = "v2",
+        feature_set: str = "v1",
     ) -> None:
         # The panel includes weeks after every origin, so nothing here may read it directly:
         # every access goes through history(panel, origin).
         if feature_set not in FEATURE_SETS:
             raise KeyError(f"Unknown feature set {feature_set!r}; use one of {list(FEATURE_SETS)}")
-        self.name = "lightgbm" if feature_set == "v2" else f"lightgbm_{feature_set}"
+        self.name = "lightgbm" if feature_set == "v1" else f"lightgbm_{feature_set}"
         self.feature_names = FEATURE_SETS[feature_set]
         self._columns = [FEATURE_NAMES.index(name) for name in self.feature_names]
         self._categorical = [n for n in CATEGORICAL_FEATURES if n in self.feature_names]

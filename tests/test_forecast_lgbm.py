@@ -180,9 +180,9 @@ def test_eligibility_matches_the_models_history_requirement(panel):
 
 
 def test_feature_sets_select_columns_and_name_the_model(panel):
-    v2 = model(panel)
-    v1 = model(panel, feature_set="v1")
-    assert (v2.name, v1.name) == ("lightgbm", "lightgbm_v1")
+    v1 = model(panel)
+    v2 = model(panel, feature_set="v2")
+    assert (v1.name, v2.name) == ("lightgbm", "lightgbm_v2")
     assert len(v1.feature_names) < len(v2.feature_names)
     assert set(v1.feature_names) < set(v2.feature_names)
     with pytest.raises(KeyError, match="Unknown feature set"):
