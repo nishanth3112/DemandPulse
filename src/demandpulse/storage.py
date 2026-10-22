@@ -12,12 +12,16 @@ from botocore.exceptions import ClientError
 
 from demandpulse.config import Settings
 
+# The S3 DeleteObjects API accepts at most 1000 keys per request.
+S3_DELETE_BATCH = 1000
+
 
 class Store(Protocol):
     def exists(self, key: str) -> bool: ...
     def read_bytes(self, key: str) -> bytes: ...
     def write_bytes(self, key: str, data: bytes) -> None: ...
     def list_keys(self, prefix: str = "") -> list[str]: ...
+    def delete_prefix(self, prefix: str) -> int: ...
 
 
 def _validate_key(key: str) -> str:
@@ -54,6 +58,13 @@ class LocalStore:
         keys = (p.relative_to(self.root).as_posix() for p in self.root.rglob("*") if p.is_file())
         return sorted(k for k in keys if k.startswith(prefix) and not k.endswith(".tmp"))
 
+    def delete_prefix(self, prefix: str) -> int:
+        removed = 0
+        for key in self.list_keys(prefix):
+            self._path(key).unlink()
+            removed += 1
+        return removed
+
 
 class S3Store:
     def __init__(self, bucket: str, client: Any) -> None:
@@ -83,6 +94,13 @@ class S3Store:
         for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
             keys.extend(item["Key"] for item in page.get("Contents", []))
         return sorted(keys)
+
+    def delete_prefix(self, prefix: str) -> int:
+        keys = self.list_keys(prefix)
+        for start in range(0, len(keys), S3_DELETE_BATCH):
+            batch = [{"Key": key} for key in keys[start : start + S3_DELETE_BATCH]]
+            self.client.delete_objects(Bucket=self.bucket, Delete={"Objects": batch, "Quiet": True})
+        return len(keys)
 
 
 def open_store(settings: Settings) -> Store:

@@ -17,7 +17,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from string import Template
 
+import boto3
 import duckdb
+
+from demandpulse.storage import LocalStore, S3Store, Store
 
 logger = logging.getLogger(__name__)
 
@@ -148,9 +151,10 @@ class GoldResult:
     seconds: dict[str, float] = field(default_factory=dict)
 
 
-def connect(config: GoldConfig) -> duckdb.DuckDBPyConnection:
+def connect(config: GoldConfig, database: str | None = None) -> duckdb.DuckDBPyConnection:
+    """Open DuckDB on the scratch database file, or on `database` (e.g. ':memory:')."""
     config.work_dir.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(config.work_dir / "gold.duckdb"))
+    con = duckdb.connect(database or str(config.work_dir / "gold.duckdb"))
     con.execute(f"SET threads={int(config.threads)}")
     con.execute(f"SET memory_limit='{config.memory_limit}'")
     con.execute(f"SET temp_directory='{(config.work_dir / 'spill').as_posix()}'")
@@ -200,7 +204,20 @@ def _table_exists(con: duckdb.DuckDBPyConnection, table: str) -> bool:
     return bool(found and found[0])
 
 
-def export_table(con: duckdb.DuckDBPyConnection, config: GoldConfig, export: Export) -> int:
+def lake_store(config: GoldConfig) -> Store:
+    """Storage handle on the lake root, used to clear stale export files."""
+    if not config.uses_s3:
+        return LocalStore(Path(config.lake_root))
+    bucket = config.lake_root.removeprefix("s3://")
+    if "/" in bucket:
+        raise ValueError(f"Lake root must be a bucket, not a prefix: {config.lake_root}")
+    session = boto3.Session(profile_name=config.aws_profile, region_name=config.aws_region)
+    return S3Store(bucket, session.client("s3"))
+
+
+def export_table(
+    con: duckdb.DuckDBPyConnection, config: GoldConfig, export: Export, store: Store
+) -> int:
     rows = con.execute(f"SELECT count(*) FROM {export.table}").fetchone()
     count = int(rows[0]) if rows else 0
     if not config.uses_s3:
@@ -215,6 +232,12 @@ def export_table(con: duckdb.DuckDBPyConnection, config: GoldConfig, export: Exp
     # and ran out of memory on 117 weeks of the full dataset. The layout is the same hive
     # style (<table>/<col>=<value>/data_0.parquet) with the column kept only in the path.
     column = export.partition_by
+    # Clear leftovers first: a previous run (or an interrupted one) may have written files this
+    # run will not overwrite, such as extra part files or weeks that no longer exist, and
+    # readers glob the whole directory.
+    removed = store.delete_prefix(f"gold/{export.table}/")
+    if removed:
+        logger.info("removed %d stale files under gold/%s/", removed, export.table)
     values = con.execute(f"SELECT DISTINCT {column} FROM {export.table} ORDER BY 1").fetchall()
     for (value,) in values:
         if not isinstance(value, int):
@@ -235,6 +258,7 @@ def build_gold(
     only: set[str] | None = None,
 ) -> GoldResult:
     con = connect(config)
+    store = lake_store(config)
     result = GoldResult()
     try:
         for step in (SILVER_VIEW, *steps):
@@ -254,7 +278,7 @@ def build_gold(
                 if step.weekly_sql_file:
                     run_weekly_sql(con, config, step.weekly_sql_file)
             for export in step.exports:
-                result.tables[export.table] = export_table(con, config, export)
+                result.tables[export.table] = export_table(con, config, export, store)
             result.seconds[step.name] = round(time.monotonic() - started, 1)
             logger.info("gold step %s done in %.1fs", step.name, result.seconds[step.name])
         _write_manifest(con, config, result)

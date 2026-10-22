@@ -127,4 +127,6 @@ def gold(tmp_path_factory, silver_frame):
         memory_limit="1GB",
     )
     build_gold(config)
-    return GoldHandle(root)
+    handle = GoldHandle(root)
+    handle.config = config
+    return handle

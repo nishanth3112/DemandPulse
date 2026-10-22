@@ -23,6 +23,10 @@ class FakeS3Client:
     def get_object(self, Bucket, Key):
         return {"Body": io.BytesIO(self.objects[Key])}
 
+    def delete_objects(self, Bucket, Delete):
+        for item in Delete["Objects"]:
+            self.objects.pop(item["Key"], None)
+
     def get_paginator(self, name):
         assert name == "list_objects_v2"
         client = self
@@ -78,3 +82,30 @@ def test_open_store_prefers_configured_backend(tmp_path):
     assert isinstance(open_store(Settings(local_data_root=tmp_path)), LocalStore)
     with pytest.raises(ValueError, match="No storage configured"):
         open_store(Settings())
+
+
+def test_delete_prefix_removes_only_that_prefix(store):
+    for key in ["gold/t/a", "gold/t/sub/b", "gold/other/c", "gold/t2/d"]:
+        store.write_bytes(key, b"1")
+
+    assert store.delete_prefix("gold/t/") == 2
+
+    assert store.list_keys("gold/") == ["gold/other/c", "gold/t2/d"]
+    assert store.delete_prefix("gold/t/") == 0
+
+
+def test_s3_delete_prefix_batches_large_deletions():
+    client = FakeS3Client()
+    s3 = S3Store("bucket", client)
+    for i in range(2500):
+        client.objects[f"p/{i:05d}"] = b"x"
+    calls = []
+    original = client.delete_objects
+    client.delete_objects = lambda **kw: (
+        calls.append(len(kw["Delete"]["Objects"])),
+        original(**kw),
+    )[1]
+
+    assert s3.delete_prefix("p/") == 2500
+    assert calls == [1000, 1000, 500]
+    assert client.objects == {}

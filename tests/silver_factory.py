@@ -64,6 +64,7 @@ def build_silver_frame(seed: int = 42) -> pl.DataFrame:
                 loyalty = rng.random() < 0.7 and bool(active)
                 cust = str(rng.choice(active)) if loyalty else None
                 shop_date = week_start + timedelta(days=int(rng.integers(0, 7)))
+                shop_hour = int(rng.integers(8, 22))
                 size = str(rng.choice(["S", "M", "L"], p=[0.3, 0.4, 0.3]))
                 btype = str(rng.choice(["Small Shop", "Top Up", "Full Shop"]))
                 mission = str(rng.choice(["Fresh", "Grocery", "Mixed", "Nonfood"]))
@@ -78,7 +79,7 @@ def build_silver_frame(seed: int = 42) -> pl.DataFrame:
                             "shop_week": week,
                             "shop_date": shop_date,
                             "shop_weekday": (shop_date.weekday() + 1) % 7 + 1,
-                            "shop_hour": int(rng.integers(8, 22)),
+                            "shop_hour": shop_hour,
                             "quantity": qty,
                             "spend": Decimal(f"{spend:.2f}"),
                             "prod_code": str(prod),

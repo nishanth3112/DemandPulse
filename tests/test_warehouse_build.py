@@ -138,3 +138,28 @@ def test_resume_reuses_existing_tables_instead_of_recomputing(silver_lake, tmp_p
     first = build(resume=False)
     assert build(resume=True) == first
     assert build(resume=False) != first
+
+
+def test_rebuild_removes_stale_partition_files_from_earlier_runs(config, tmp_path):
+    sql = tmp_path / "p.sql"
+    sql.write_text("CREATE OR REPLACE TABLE p AS SELECT 1 AS k, 'a' AS v UNION ALL SELECT 2, 'b'")
+    steps = (Step("p", str(sql), (Export("p", partition_by="k"),)),)
+    build_gold(config, steps=steps)
+
+    gold_dir = config.work_dir.parent / "lake" / "gold" / "p"
+    # What an interrupted run with a different layout leaves behind: an extra part file in a
+    # live partition and a whole partition that the new data no longer has.
+    (gold_dir / "k=1" / "data_1.parquet").write_bytes(
+        (gold_dir / "k=1" / "data_0.parquet").read_bytes()
+    )
+    (gold_dir / "k=9").mkdir()
+    (gold_dir / "k=9" / "data_0.parquet").write_bytes(
+        (gold_dir / "k=2" / "data_0.parquet").read_bytes()
+    )
+
+    build_gold(config, steps=steps)
+
+    files = sorted(p.relative_to(gold_dir).as_posix() for p in gold_dir.rglob("*.parquet"))
+    assert files == ["k=1/data_0.parquet", "k=2/data_0.parquet"]
+    total = duckdb.sql(f"SELECT count(*) FROM read_parquet('{gold_dir}/*/*.parquet')").fetchone()
+    assert total == (2,)
