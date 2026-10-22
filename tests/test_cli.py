@@ -66,3 +66,26 @@ def test_known_issue_sources_are_refused_unless_overridden(tmp_path, capsys):
     )
     assert run(["ingest", "bad"], path, tmp_path / "lake") == 2
     assert "ids are corrupted" in capsys.readouterr().err
+
+
+def test_gold_build_validates_and_exports_marts(silver_lake, tmp_path, capsys):
+    args = [
+        "--local-root", str(silver_lake), "gold", "build",
+        "--source-glob", "fixture", "--window-weeks", "2", "--year-weeks", "4",
+        "--work-dir", str(tmp_path / "work"), "--threads", "2", "--memory-limit", "1GB",
+    ]  # fmt: skip
+    assert cli.main(args) == 0
+
+    out = capsys.readouterr().out
+    assert "checks passed" in out
+    assert "FAIL" not in out
+    assert (silver_lake / "gold" / "mart_store_scorecard.parquet").exists()
+
+
+def test_gold_validate_fails_when_nothing_was_built(silver_lake, tmp_path):
+    args = [
+        "--local-root", str(silver_lake), "gold", "validate",
+        "--source-glob", "fixture", "--work-dir", str(tmp_path / "work"),
+    ]  # fmt: skip
+    with pytest.raises(FileNotFoundError, match="build Gold first"):
+        cli.main(args)

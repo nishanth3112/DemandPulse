@@ -9,8 +9,8 @@ The dataset is synthetic and historical. Results describe the dataset and histor
 | Phase | Scope | State |
 |---|---|---|
 | 0 | Repository foundation and CI | merged |
-| 1 | Data engineering and quality | in review |
-| 2 | SQL analytics and business KPIs | planned |
+| 1 | Data engineering and quality | merged |
+| 2 | SQL analytics and business KPIs | in review |
 | 3 | Forecasting and model evaluation | planned |
 | 4 | Revenue risk and decision intelligence | planned |
 | 5 | Streamlit dashboard | planned |
@@ -35,6 +35,18 @@ uv run demandpulse --local-root /tmp/lake run sample-5k-customers   # no AWS nee
 Zips are streamed over HTTP and converted to Bronze and Silver Parquet one week at a time, with
 resumable manifests and a reconciliation report. Details, verified data findings and results
 are in [docs/data-pipeline.md](docs/data-pipeline.md).
+
+## Analytics warehouse (Gold)
+
+```bash
+uv run demandpulse gold build        # DuckDB marts over Silver, then validation checks
+uv run demandpulse gold validate     # re-run the checks against the built marts
+```
+
+Dimensions (date, store, product hierarchy, customer) and marts for store and category KPIs,
+regional and peer benchmarking, like-for-like growth, customer RFM and cohorts, basket mix and
+revenue variance decomposition. KPI definitions, method notes and results are in
+[docs/gold-layer.md](docs/gold-layer.md).
 
 ## Stack
 
@@ -72,8 +84,9 @@ Work happens on one branch per phase, merged to `main` through a pull request af
 ```
 src/demandpulse/   settings, storage, CLI, quality checks, hygiene guard
 src/demandpulse/ingest/   source registry, remote zip reader, Bronze and Silver
+src/demandpulse/warehouse/   DuckDB runner, SQL marts (sql/), validation checks
 config/            dunnhumby source registry
-docs/              pipeline documentation
+docs/              pipeline and Gold layer documentation
 tests/             unit tests (CI) and opt-in integration tests
 .github/           CI workflow and PR template
 ```
