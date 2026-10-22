@@ -30,6 +30,11 @@ SELECT
     coalesce(cur.share, 0) AS current_share,
     coalesce(base.share, 0) AS base_share,
     (coalesce(cur.share, 0) - coalesce(base.share, 0)) * 100 AS share_change_pp,
+    -- Percentage points of national revenue growth contributed by this category; the column
+    -- sums to the national growth rate (x 100) within a comparison.
+    (coalesce(cur.revenue, 0) - coalesce(base.revenue, 0))
+        / sum(coalesce(base.revenue, 0)) OVER (PARTITION BY coalesce(cur.comparison, base.comparison))
+        * 100 AS contribution_to_growth_pp,
     cur.penetration AS current_penetration,
     base.penetration AS base_penetration,
     cur.avg_unit_price AS current_avg_unit_price,

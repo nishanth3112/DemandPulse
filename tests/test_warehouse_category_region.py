@@ -155,3 +155,15 @@ def test_region_mix_shares_sum_to_one_and_index_matches_definition(gold, compari
         f"AND abs(mix_index - 100 * region_share / national_share) > 1e-9"
     )
     assert bad == 0
+
+
+@pytest.mark.parametrize("comparison", list(WINDOWS))
+def test_category_contributions_add_up_to_national_growth(gold, silver_frame, comparison):
+    cur_idx, base_idx = WINDOWS[comparison]
+    total = gold.one(
+        f"SELECT sum(contribution_to_growth_pp) FROM mart_category_benchmark "
+        f"WHERE comparison = '{comparison}'"
+    )
+    cur = window_revenue(silver_frame, cur_idx)
+    base = window_revenue(silver_frame, base_idx)
+    assert total == pytest.approx((cur / base - 1) * 100)
