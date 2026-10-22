@@ -80,6 +80,15 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step("store_scorecard", "40_store_scorecard.sql", (Export("mart_store_scorecard"),)),
+    Step(
+        "customer_marts",
+        "50_customer_marts.sql",
+        (
+            Export("mart_customer_rfm"),
+            Export("mart_rfm_segment_summary"),
+            Export("mart_customer_cohort"),
+        ),
+    ),
 )
 
 
