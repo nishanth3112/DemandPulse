@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import sys
 from collections.abc import Sequence
@@ -6,6 +7,16 @@ from importlib.metadata import version
 from pathlib import Path
 
 from demandpulse.config import Settings
+from demandpulse.forecasting.panel import ORIGINS, build_panel
+from demandpulse.forecasting.runner import (
+    ALL_MODELS,
+    load_inputs,
+    prepare_subset,
+    run_model,
+    save_inputs,
+    save_run,
+    write_report,
+)
 from demandpulse.ingest.bronze import ingest_source
 from demandpulse.ingest.silver import build_silver
 from demandpulse.ingest.sources import DEFAULT_REGISTRY, get_source, load_sources
@@ -70,6 +81,26 @@ def build_parser() -> argparse.ArgumentParser:
                 "--only", help=f"comma-separated steps: {', '.join(s.name for s in STEPS)}"
             )
             sub.add_argument("--no-validate", action="store_true")
+
+    forecast = commands.add_parser("forecast", help="forecasting panel, backtests and reports")
+    forecast_commands = forecast.add_subparsers(dest="forecast_command", required=True)
+    prepare = forecast_commands.add_parser(
+        "prepare", help="build the weekly panel and representative subset from Gold"
+    )
+    prepare.add_argument("--source-glob", default="full-part-*")
+    prepare.add_argument("--work-dir", type=Path, default=Path("data/work"))
+    backtest = forecast_commands.add_parser("backtest", help="run models over the shared backtest")
+    backtest.add_argument(
+        "models", nargs="+", help=f"model names or 'all': {', '.join(ALL_MODELS)}"
+    )
+    backtest.add_argument("--run", default="default")
+    backtest.add_argument(
+        "--origins", help=f"comma-separated, default {','.join(map(str, ORIGINS))}"
+    )
+    backtest.add_argument("--workers", type=int, default=8)
+    backtest.add_argument("--options", default="{}", help="JSON options for neuralprophet/greykite")
+    report = forecast_commands.add_parser("report", help="write the model comparison report")
+    report.add_argument("--run", default="default")
     return parser
 
 
@@ -77,13 +108,13 @@ def _gold_config(args: argparse.Namespace, settings: Settings) -> GoldConfig:
     return GoldConfig(
         lake_root=settings.storage_root,
         source_glob=args.source_glob,
-        window_weeks=args.window_weeks,
-        year_weeks=args.year_weeks,
+        window_weeks=getattr(args, "window_weeks", 13),
+        year_weeks=getattr(args, "year_weeks", 52),
         aws_profile=settings.aws_profile if settings.s3_bucket else None,
         aws_region=settings.aws_region,
         work_dir=args.work_dir,
-        memory_limit=args.memory_limit,
-        threads=args.threads,
+        memory_limit=getattr(args, "memory_limit", "8GB"),
+        threads=getattr(args, "threads", 8),
         resume=getattr(args, "resume", False),
     )
 
@@ -112,6 +143,40 @@ def _run_gold(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _run_forecast(args: argparse.Namespace) -> int:
+    settings = _settings(args)
+    store = open_store(settings)
+    if args.forecast_command == "prepare":
+        panel = build_panel(_gold_config(args, settings))
+        subset = prepare_subset(panel)
+        save_inputs(store, panel, subset)
+        logger.info(
+            "saved panel (%d rows) and subset (%d series)", panel.height, subset.series.height
+        )
+        return 0
+
+    panel, subset = load_inputs(store)
+    if args.forecast_command == "backtest":
+        names = list(ALL_MODELS) if args.models == ["all"] else args.models
+        origins = tuple(int(o) for o in args.origins.split(",")) if args.origins else None
+        for name in names:
+            model_run = run_model(
+                name,
+                panel,
+                subset,
+                origins=origins,
+                workers=args.workers,
+                options=json.loads(args.options),
+            )
+            save_run(store, args.run, model_run)
+            logger.info("saved %s (%s scope) to run %s", name, model_run.scope, args.run)
+        return 0
+
+    text, _ = write_report(store, args.run, panel, subset)
+    print(text)
+    return 0
+
+
 def _settings(args: argparse.Namespace) -> Settings:
     settings = Settings.from_env()
     if args.local_root:
@@ -136,6 +201,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "gold":
         return _run_gold(args)
+    if args.command == "forecast":
+        return _run_forecast(args)
 
     store = open_store(_settings(args))
     source = get_source(args.source, args.sources_file)
