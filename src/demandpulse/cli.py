@@ -23,6 +23,7 @@ from demandpulse.ingest.silver import build_silver
 from demandpulse.ingest.sources import DEFAULT_REGISTRY, get_source, load_sources
 from demandpulse.logging_setup import configure_logging
 from demandpulse.quality import run_quality_checks
+from demandpulse.risk.runner import PRIMARY_MODEL, TOP_K, load_store_weeks, run_risk
 from demandpulse.storage import open_store
 from demandpulse.warehouse.build import STEPS, GoldConfig, build_gold
 from demandpulse.warehouse.checks import CheckOutcome, run_checks
@@ -112,6 +113,22 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--origins", help=f"origins in the run, default {','.join(map(str, ORIGINS))}"
     )
+
+    risk = commands.add_parser("risk", help="revenue-risk ranking, classifier and report")
+    risk_commands = risk.add_subparsers(dest="risk_command", required=True)
+    risk_run = risk_commands.add_parser(
+        "run", help="score forecasts against targets and write the risk outputs and report"
+    )
+    risk_run.add_argument(
+        "--forecast-run",
+        action="append",
+        dest="forecast_runs",
+        help="forecast run to read, repeatable (default: main and robustness)",
+    )
+    risk_run.add_argument("--primary-model", default=PRIMARY_MODEL)
+    risk_run.add_argument("--top-k", type=int, default=TOP_K)
+    risk_run.add_argument("--source-glob", default="full-part-*")
+    risk_run.add_argument("--work-dir", type=Path, default=Path("data/work"))
     return parser
 
 
@@ -195,6 +212,23 @@ def _run_forecast(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_risk(args: argparse.Namespace) -> int:
+    settings = _settings(args)
+    store = open_store(settings)
+    panel, _ = load_inputs(store)
+    store_weeks = load_store_weeks(_gold_config(args, settings))
+    text, _ = run_risk(
+        store,
+        panel,
+        store_weeks,
+        runs=args.forecast_runs or ["main", "robustness"],
+        primary=args.primary_model,
+        top_k=args.top_k,
+    )
+    print(text)
+    return 0
+
+
 def _settings(args: argparse.Namespace) -> Settings:
     settings = Settings.from_env()
     if args.local_root:
@@ -221,6 +255,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_gold(args)
     if args.command == "forecast":
         return _run_forecast(args)
+    if args.command == "risk":
+        return _run_risk(args)
 
     store = open_store(_settings(args))
     source = get_source(args.source, args.sources_file)
