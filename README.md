@@ -11,8 +11,8 @@ The dataset is synthetic and historical. Results describe the dataset and histor
 | 0 | Repository foundation and CI | merged |
 | 1 | Data engineering and quality | merged |
 | 2 | SQL analytics and business KPIs | merged |
-| 3 | Forecasting and model evaluation | in review |
-| 4 | Revenue risk and decision intelligence | planned |
+| 3 | Forecasting and model evaluation | merged |
+| 4 | Revenue risk and decision intelligence | in review |
 | 5 | Streamlit dashboard | planned |
 | 6 | Production hardening and release | planned |
 
@@ -62,6 +62,20 @@ a 13-week horizon, with leakage guards and bootstrap confidence intervals. Neura
 Greykite run in their own locked environments under `envs/`. Method, results and caveats are in
 [docs/forecasting.md](docs/forecasting.md).
 
+## Revenue risk
+
+```bash
+uv run demandpulse risk run                      # score forecasts against hypothetical targets
+```
+
+Stores and store x category series are ranked by how likely they are to miss a revenue target
+over the next 13 weeks, using only data known at each forecast origin, and the ranking is scored
+against what happened (precision@K, recall@K, lift, shortfall captured) with an own-trend baseline
+and an exact random baseline. A calibrated LightGBM classifier is evaluated as an exploratory
+check, and a scenario planner shows what driver changes would close a gap. Targets are
+hypothetical and all windows are historical. Method, results and caveats are in
+[docs/revenue-risk.md](docs/revenue-risk.md).
+
 ## Stack
 
 Python 3.12, uv, Polars, DuckDB, PyArrow, Parquet, LightGBM, statsmodels, Streamlit, Plotly, pytest, Ruff, GitHub Actions. Greykite and NeuralProphet are planned for the forecasting phase and are not installed yet.
@@ -100,6 +114,7 @@ src/demandpulse/   settings, storage, CLI, quality checks, hygiene guard
 src/demandpulse/ingest/   source registry, remote zip reader, Bronze and Silver
 src/demandpulse/warehouse/   DuckDB runner, SQL marts (sql/), validation checks
 src/demandpulse/forecasting/   panel, metrics, backtest harness, models, runner and report
+src/demandpulse/risk/   targets, shortfall probability, ranking backtest, classifier, scenarios, runner
 envs/              isolated locked environments for NeuralProphet and Greykite
 config/            dunnhumby source registry
 docs/              pipeline and Gold layer documentation
