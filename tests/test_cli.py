@@ -124,3 +124,44 @@ def test_forecast_prepare_explains_when_the_data_is_too_short(silver_lake, tmp_p
     ]  # fmt: skip
     with pytest.raises(ValueError, match="No series are eligible"):
         cli.main(prepare)
+
+
+def test_risk_run_scores_saved_forecasts_and_writes_the_report(tmp_path, capsys):
+    from demandpulse.forecasting.panel import Subset
+    from demandpulse.forecasting.runner import save_inputs
+    from demandpulse.storage import LocalStore
+    from risk_data import make_forecasts, make_panel, save_forecasts, store_weeks
+
+    frame = make_panel()
+    lake = tmp_path / "lake"
+    store = LocalStore(lake)
+    series = frame.select("store_code", "prod_code_30").unique().with_columns(stratum=pl.lit("x"))
+    save_inputs(store, frame, Subset(series=series, seed=1))
+    forecasts = make_forecasts(frame)
+    save_forecasts(store, forecasts, "main", [78, 91, 104])
+    save_forecasts(store, forecasts, "robustness", [85, 98])
+    weeks = store_weeks(frame)
+    (lake / "gold").mkdir()
+    weeks.select(
+        pl.col("week_idx").alias("shop_week"), "store_code", "revenue", "baskets", "units"
+    ).write_parquet(lake / "gold/fct_store_week.parquet")
+    weeks.select(pl.col("week_idx").alias("shop_week"), "week_idx").unique().write_parquet(
+        lake / "gold/dim_date.parquet"
+    )
+
+    code = cli.main(
+        [
+            "--local-root",
+            str(lake),
+            "risk",
+            "run",
+            "--top-k",
+            "3",
+            "--work-dir",
+            str(tmp_path / "w"),
+        ]
+    )
+
+    assert code == 0
+    assert "# Revenue risk report" in capsys.readouterr().out
+    assert store.exists("risk/report.md")
