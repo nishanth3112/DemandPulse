@@ -13,8 +13,30 @@ The dataset is synthetic and historical. Results describe the dataset and histor
 | 2 | SQL analytics and business KPIs | merged |
 | 3 | Forecasting and model evaluation | merged |
 | 4 | Revenue risk and decision intelligence | merged |
-| 5 | Streamlit dashboard | in review |
-| 6 | Production hardening and release | planned |
+| 5 | Streamlit dashboard | merged |
+| 6 | Production hardening and release | in review |
+
+## Try it in a few minutes (no AWS, no download)
+
+```bash
+uv sync --locked
+uv run demandpulse demo --out data/demo         # synthetic data through every stage, with timings
+DEMANDPULSE_APP_DATA=data/demo/app uv run streamlit run src/demandpulse/app/main.py
+```
+
+`demo` writes invented data with the real Silver schema, builds the Gold marts, runs three
+forecasters and their average, scores revenue risk and exports the dashboard snapshot. It takes a
+few seconds. `uv run demandpulse benchmark` times each stage at several data sizes. The synthetic data
+shows the machinery works; it says nothing about the real dataset.
+
+With Docker, the same demo runs in the dashboard image:
+
+```bash
+docker build -t demandpulse .
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/data/demo:/demo" \
+  --entrypoint demandpulse demandpulse demo --out /demo/lake
+docker run --rm -p 8501:8501 -v "$PWD/data/demo/lake/app:/data/app:ro" demandpulse
+```
 
 ## Dataset
 
@@ -86,6 +108,16 @@ uv run streamlit run src/demandpulse/app/main.py   # executive overview, stores,
 The app reads only a local snapshot (about 4 MB) and holds no credentials; it never reads the
 basket fact. Pages, design and limitations are in [docs/dashboard.md](docs/dashboard.md).
 
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Data flow, layers, lake layout, design decisions and trade-offs |
+| [docs/data-quality.md](docs/data-quality.md) | Every check, and what the full run found |
+| [docs/model-evaluation.md](docs/model-evaluation.md) | How well each model worked and what is not established |
+| [docs/case-study.md](docs/case-study.md) | A worked business example, labelled observed, backtest, scenario and hypothetical |
+| [docs/teardown.md](docs/teardown.md) | How to remove the AWS resources |
+
 ## Stack
 
 Python 3.12, uv, Polars, DuckDB, PyArrow, Parquet, LightGBM, statsmodels, Streamlit, Plotly, pytest, Ruff, GitHub Actions. Greykite and NeuralProphet are planned for the forecasting phase and are not installed yet.
@@ -105,6 +137,8 @@ Configuration is read from environment variables (`uv run --env-file .env ...`).
 | `AWS_PROFILE`, `AWS_REGION` | AWS profile and region (default `us-east-1`) |
 | `DEMANDPULSE_S3_BUCKET` | Private bucket holding Bronze/Silver Parquet |
 | `DEMANDPULSE_LOCAL_DATA_ROOT` | Local directory instead of S3 (set one, not both) |
+| `DEMANDPULSE_LOG_LEVEL`, `DEMANDPULSE_LOG_FORMAT` | Log level, and `text` or `json` (one object per line on stderr) |
+| `DEMANDPULSE_APP_DATA` | Folder the dashboard reads (default `data/app`) |
 
 ## Development
 
@@ -115,7 +149,7 @@ uv run python -m demandpulse.hygiene   # no data files or secrets in Git
 uv run pytest
 ```
 
-Work happens on one branch per phase, merged to `main` through a pull request after CI passes. CI runs the checks above on every pull request and never downloads the full dataset. Tests marked `integration` hit the real CDN and are excluded by default and in CI; run them with `uv run pytest -m integration`.
+Work happens on one branch per phase, merged to `main` through a pull request after CI passes. CI runs the checks above (with a 90% coverage gate) on every pull request, builds and smoke-tests the dashboard image, and never downloads the full dataset. Tests marked `integration` hit the real CDN and are excluded by default and in CI; run them with `uv run pytest -m integration`.
 
 ## Layout
 
@@ -126,9 +160,10 @@ src/demandpulse/warehouse/   DuckDB runner, SQL marts (sql/), validation checks
 src/demandpulse/forecasting/   panel, metrics, backtest harness, models, runner and report
 src/demandpulse/risk/   targets, shortfall probability, ranking backtest, classifier, scenarios, runner
 src/demandpulse/app/   snapshot export and loader, view logic, charts and Streamlit pages
+src/demandpulse/synthetic.py, demo.py   invented Silver data, the end-to-end demo and benchmark
 envs/              isolated locked environments for NeuralProphet and Greykite
 config/            dunnhumby source registry
-docs/              pipeline and Gold layer documentation
+docs/              pipeline, Gold, forecasting, risk, dashboard, architecture and quality docs
 tests/             unit tests (CI) and opt-in integration tests
 .github/           CI workflow and PR template
 ```
