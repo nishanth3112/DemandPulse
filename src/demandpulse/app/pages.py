@@ -162,7 +162,7 @@ def stores() -> None:
         m = st.columns(4)
         m[0].metric("Revenue", ui.money(p["current_revenue"]), ui.pct(p["revenue_growth"], True))
         m[1].metric("Baskets", ui.money(p["current_baskets"]), ui.pct(p["basket_growth"], True))
-        m[2].metric("Average basket", f"{p['current_avg_basket_value']:.2f}")
+        m[2].metric("Average basket", ui.number(p["current_avg_basket_value"]))
         m[3].metric("Format / region", f"{p['store_format']} / {p['store_region']}")
         trend, drivers = st.columns(2)
         trend.plotly_chart(charts.trend_chart(detail.weekly), width="stretch")

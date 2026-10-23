@@ -57,3 +57,7 @@ markers = [
 [tool.coverage.run]
 source = ["src/demandpulse"]
 branch = true
+
+[tool.coverage.report]
+# Coverage was 96% when the gate was added; a drop below 90 means new code shipped untested.
+fail_under = 90

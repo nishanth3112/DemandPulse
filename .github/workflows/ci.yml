@@ -39,3 +39,31 @@ jobs:
 
       - name: Tests
         run: uv run pytest --cov --cov-report=term-missing -m "not integration"
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the dashboard image
+        run: docker build -t demandpulse:ci .
+
+      - name: Run the pipeline demo inside the image
+        run: |
+          mkdir -p "$RUNNER_TEMP/demo"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$RUNNER_TEMP/demo:/demo" --entrypoint demandpulse \
+            demandpulse:ci demo --out /demo/lake --stores 34
+
+      - name: Serve the dashboard from the demo snapshot
+        run: |
+          docker run -d --name dashboard -p 8501:8501 \
+            -v "$RUNNER_TEMP/demo/lake/app:/data/app:ro" demandpulse:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8501/_stcore/health && exit 0
+            sleep 2
+          done
+          docker logs dashboard
+          exit 1

@@ -44,8 +44,10 @@ def comparison_picker() -> None:
     )
 
 
-def money(value: float) -> str:
-    """Compact revenue: 66.7M, 412K."""
+def money(value: float | None) -> str:
+    """Compact revenue: 66.7M, 412K. Missing values (a store with no sales) read n/a."""
+    if value is None:
+        return "n/a"
     magnitude = abs(value)
     if magnitude >= 1e9:
         return f"{value / 1e9:,.2f}B"
@@ -54,6 +56,12 @@ def money(value: float) -> str:
     if magnitude >= 1e3:
         return f"{value / 1e3:,.0f}K"
     return f"{value:,.0f}"
+
+
+def number(value: float | None, decimals: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:,.{decimals}f}"
 
 
 def pct(value: float | None, signed: bool = False) -> str:

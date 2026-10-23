@@ -1,7 +1,9 @@
 import argparse
 import json
 import logging
+import os
 import sys
+import tempfile
 from collections.abc import Sequence
 from importlib.metadata import version
 from pathlib import Path
@@ -9,6 +11,7 @@ from pathlib import Path
 from demandpulse.app.export import export_snapshot
 from demandpulse.app.snapshot import DEFAULT_APP_DIR
 from demandpulse.config import Settings
+from demandpulse.demo import MIN_WEEKS, render_benchmark, render_timings, run_demo
 from demandpulse.forecasting.panel import ORIGINS, build_panel
 from demandpulse.forecasting.runner import (
     ALL_MODELS,
@@ -23,7 +26,7 @@ from demandpulse.forecasting.runner import (
 from demandpulse.ingest.bronze import ingest_source
 from demandpulse.ingest.silver import build_silver
 from demandpulse.ingest.sources import DEFAULT_REGISTRY, get_source, load_sources
-from demandpulse.logging_setup import configure_logging
+from demandpulse.logging_setup import FORMAT_ENV, LEVEL_ENV, LOG_FORMATS, configure_logging, timed
 from demandpulse.quality import run_quality_checks
 from demandpulse.risk.runner import PRIMARY_MODEL, TOP_K, load_store_weeks, run_risk
 from demandpulse.storage import open_store
@@ -31,6 +34,13 @@ from demandpulse.warehouse.build import STEPS, GoldConfig, build_gold
 from demandpulse.warehouse.checks import CheckOutcome, run_checks
 
 logger = logging.getLogger("demandpulse.cli")
+
+
+def _sizes(value: str) -> list[int]:
+    sizes = [int(part) for part in value.split(",") if part.strip()]
+    if not sizes or min(sizes) < 1:
+        raise argparse.ArgumentTypeError("need one or more positive store counts")
+    return sizes
 
 
 def _weeks(value: str) -> set[int]:
@@ -44,7 +54,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--local-root", type=Path, help="write to this directory instead of S3")
     parser.add_argument("--sources-file", type=Path, default=DEFAULT_REGISTRY)
-    parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--log-level", default=os.environ.get(LEVEL_ENV, "INFO"))
+    parser.add_argument(
+        "--log-format",
+        choices=LOG_FORMATS,
+        default=os.environ.get(FORMAT_ENV, "text"),
+        help="text, or one JSON object per line on stderr",
+    )
     parser.add_argument(
         "--allow-known-issue",
         action="store_true",
@@ -115,6 +131,18 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--origins", help=f"origins in the run, default {','.join(map(str, ORIGINS))}"
     )
+
+    demo = commands.add_parser(
+        "demo", help="build a synthetic lake, run every stage and a dashboard snapshot, no AWS"
+    )
+    demo.add_argument("--out", type=Path, default=Path("data/demo"))
+    demo.add_argument("--stores", type=int, default=40)
+    demo.add_argument("--seed", type=int, default=7)
+    bench = commands.add_parser("benchmark", help="time every pipeline stage on synthetic data")
+    bench.add_argument(
+        "--stores", type=_sizes, default=[20, 40, 80], help="comma-separated store counts"
+    )
+    bench.add_argument("--seed", type=int, default=7)
 
     app = commands.add_parser("app", help="dashboard data snapshot")
     app_commands = app.add_subparsers(dest="app_command", required=True)
@@ -221,6 +249,36 @@ def _run_forecast(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_demo(args: argparse.Namespace) -> int:
+    if args.out.exists() and any(args.out.iterdir()):
+        print(
+            f"{args.out} already has files. Pick a new --out directory, or delete it first.",
+            file=sys.stderr,
+        )
+        return 2
+    result = run_demo(args.out, stores=args.stores, seed=args.seed)
+    print(render_timings(result))
+    print(f"\nOpen the dashboard on this synthetic data:\n  {_dashboard_command(result.app_dir)}")
+    return 0
+
+
+def _dashboard_command(app_dir: Path) -> str:
+    return f"DEMANDPULSE_APP_DATA={app_dir} uv run streamlit run src/demandpulse/app/main.py"
+
+
+def _run_benchmark(args: argparse.Namespace) -> int:
+    results = []
+    for stores in args.stores:
+        with tempfile.TemporaryDirectory(prefix="demandpulse-bench-") as scratch:
+            results.append(run_demo(Path(scratch), stores=stores, seed=args.seed))
+    print(render_benchmark(results))
+    print(
+        f"\nSynthetic data, {MIN_WEEKS} weeks, one machine, one run each. These are timings of "
+        "this code on invented data, not of the real 307M-row dataset."
+    )
+    return 0
+
+
 def _run_app(args: argparse.Namespace) -> int:
     manifest = export_snapshot(open_store(_settings(args)), args.out)
     rows = sum(manifest["tables"].values())
@@ -261,8 +319,12 @@ def _settings(args: argparse.Namespace) -> Settings:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    configure_logging(args.log_level.upper())
+    configure_logging(args.log_level.upper(), args.log_format)
+    with timed(logger, f"command {args.command}"):
+        return _dispatch(args)
 
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "sources":
         for source in load_sources(args.sources_file).values():
             flag = "  [KNOWN ISSUE]" if source.known_issue else ""
@@ -277,6 +339,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_risk(args)
     if args.command == "app":
         return _run_app(args)
+    if args.command == "demo":
+        return _run_demo(args)
+    if args.command == "benchmark":
+        return _run_benchmark(args)
 
     store = open_store(_settings(args))
     source = get_source(args.source, args.sources_file)
