@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import polars as pl
 import pytest
 
@@ -141,9 +144,20 @@ def test_loyalty_coverage_is_a_share_of_revenue_and_baskets(snap):
     assert 0 < coverage["basket_share"] <= 1
 
 
-def test_segments_follow_the_customer_journey_order(snap):
+def test_segments_are_ordered_best_to_worst(snap):
     table = views.segment_table(snap.table("mart_rfm_segment_summary"))
     assert table["rfm_segment"].to_list() == list(views.SEGMENT_ORDER)
+
+
+def test_segment_order_covers_exactly_the_labels_the_rfm_sql_writes():
+    sql = (Path(views.__file__).parents[1] / "warehouse/sql/50_customer_marts.sql").read_text()
+    labels = set(re.findall(r"(?:THEN|ELSE) '([^']+)'", sql))
+    assert labels == set(views.SEGMENT_ORDER)
+
+
+def test_an_unknown_segment_sorts_last_instead_of_crashing():
+    frame = pl.DataFrame({"rfm_segment": ["Brand new label", "Champions"]})
+    assert views.segment_table(frame)["rfm_segment"].to_list() == ["Champions", "Brand new label"]
 
 
 def test_retention_matrix_orders_periods_numerically(snap):

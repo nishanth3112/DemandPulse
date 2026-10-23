@@ -16,7 +16,16 @@ COMPARISON_LABELS = {
 }
 NETWORK = "ALL"
 TREND_WINDOW = 13
-SEGMENT_ORDER = ("Champions", "Loyal", "Potential", "New", "At risk", "Hibernating", "Lost")
+# Best to worst. These are the labels written by the RFM SQL; a test keeps the two in step.
+SEGMENT_ORDER = (
+    "Champions",
+    "Loyal",
+    "Potential loyalists",
+    "New or returning",
+    "Needs attention",
+    "At risk",
+    "Hibernating",
+)
 BRIDGE_STEPS = (
     ("trading_weeks_effect", "Trading weeks"),
     ("traffic_effect", "Traffic (baskets per week)"),
@@ -249,7 +258,7 @@ def loyalty_coverage(store_week: pl.DataFrame) -> dict[str, float]:
 
 
 def segment_table(rfm_summary: pl.DataFrame) -> pl.DataFrame:
-    """RFM segments in the order of the customer journey, with their customer and revenue shares."""
+    """RFM segments from best to worst customers, with their customer and revenue shares."""
     order = {name: i for i, name in enumerate(SEGMENT_ORDER)}
     return (
         rfm_summary.with_columns(

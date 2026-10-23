@@ -23,7 +23,10 @@ from risk_data import (
 )
 
 COMPARISONS = ("window_vs_prior", "window_vs_year_ago", "year_vs_prior_year")
-SEGMENTS = ("Champions", "Loyal", "Potential", "New", "At risk", "Hibernating", "Lost")
+SEGMENTS = (
+    "Champions", "Loyal", "Potential loyalists", "New or returning", "Needs attention",
+    "At risk", "Hibernating",
+)  # fmt: skip
 FIRST_MONDAY = date(2006, 4, 10)
 EFFECTS = ("traffic_effect", "basket_size_effect", "price_mix_effect")
 
