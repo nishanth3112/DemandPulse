@@ -6,6 +6,7 @@ import polars as pl
 ORIGINS = (78, 85, 91, 98, 104)
 N_STORES = 45
 CATEGORIES = ("C1", "C2")
+REGIONS = ("E01", "W01", "N01")
 
 
 def make_panel() -> pl.DataFrame:
@@ -23,7 +24,7 @@ def make_panel() -> pl.DataFrame:
                         f"S{s:02d}",
                         category,
                         "LS" if s % 2 else "SS",
-                        "E01",
+                        REGIONS[s % len(REGIONS)],
                         week,
                         revenue,
                         revenue / 2,

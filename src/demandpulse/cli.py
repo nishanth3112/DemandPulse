@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from importlib.metadata import version
 from pathlib import Path
 
+from demandpulse.app.export import export_snapshot
+from demandpulse.app.snapshot import DEFAULT_APP_DIR
 from demandpulse.config import Settings
 from demandpulse.forecasting.panel import ORIGINS, build_panel
 from demandpulse.forecasting.runner import (
@@ -114,6 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--origins", help=f"origins in the run, default {','.join(map(str, ORIGINS))}"
     )
 
+    app = commands.add_parser("app", help="dashboard data snapshot")
+    app_commands = app.add_subparsers(dest="app_command", required=True)
+    export = app_commands.add_parser(
+        "export", help="copy the small marts and risk outputs the dashboard reads out of the lake"
+    )
+    export.add_argument("--out", type=Path, default=DEFAULT_APP_DIR)
+
     risk = commands.add_parser("risk", help="revenue-risk ranking, classifier and report")
     risk_commands = risk.add_subparsers(dest="risk_command", required=True)
     risk_run = risk_commands.add_parser(
@@ -212,6 +221,15 @@ def _run_forecast(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_app(args: argparse.Namespace) -> int:
+    manifest = export_snapshot(open_store(_settings(args)), args.out)
+    rows = sum(manifest["tables"].values())
+    logger.info(
+        "exported %d tables (%s rows) to %s", len(manifest["tables"]), f"{rows:,}", args.out
+    )
+    return 0
+
+
 def _run_risk(args: argparse.Namespace) -> int:
     settings = _settings(args)
     store = open_store(settings)
@@ -257,6 +275,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_forecast(args)
     if args.command == "risk":
         return _run_risk(args)
+    if args.command == "app":
+        return _run_app(args)
 
     store = open_store(_settings(args))
     source = get_source(args.source, args.sources_file)

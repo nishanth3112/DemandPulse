@@ -12,8 +12,8 @@ The dataset is synthetic and historical. Results describe the dataset and histor
 | 1 | Data engineering and quality | merged |
 | 2 | SQL analytics and business KPIs | merged |
 | 3 | Forecasting and model evaluation | merged |
-| 4 | Revenue risk and decision intelligence | in review |
-| 5 | Streamlit dashboard | planned |
+| 4 | Revenue risk and decision intelligence | merged |
+| 5 | Streamlit dashboard | in review |
 | 6 | Production hardening and release | planned |
 
 ## Dataset
@@ -76,6 +76,16 @@ check, and a scenario planner shows what driver changes would close a gap. Targe
 hypothetical and all windows are historical. Method, results and caveats are in
 [docs/revenue-risk.md](docs/revenue-risk.md).
 
+## Dashboard
+
+```bash
+uv run demandpulse app export                      # copy the small marts and outputs from the lake
+uv run streamlit run src/demandpulse/app/main.py   # executive overview, stores, forecasts, risk, customers
+```
+
+The app reads only a local snapshot (about 4 MB) and holds no credentials; it never reads the
+basket fact. Pages, design and limitations are in [docs/dashboard.md](docs/dashboard.md).
+
 ## Stack
 
 Python 3.12, uv, Polars, DuckDB, PyArrow, Parquet, LightGBM, statsmodels, Streamlit, Plotly, pytest, Ruff, GitHub Actions. Greykite and NeuralProphet are planned for the forecasting phase and are not installed yet.
@@ -115,6 +125,7 @@ src/demandpulse/ingest/   source registry, remote zip reader, Bronze and Silver
 src/demandpulse/warehouse/   DuckDB runner, SQL marts (sql/), validation checks
 src/demandpulse/forecasting/   panel, metrics, backtest harness, models, runner and report
 src/demandpulse/risk/   targets, shortfall probability, ranking backtest, classifier, scenarios, runner
+src/demandpulse/app/   snapshot export and loader, view logic, charts and Streamlit pages
 envs/              isolated locked environments for NeuralProphet and Greykite
 config/            dunnhumby source registry
 docs/              pipeline and Gold layer documentation

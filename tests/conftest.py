@@ -137,3 +137,15 @@ def forecast_panel(gold):
     from demandpulse.forecasting.panel import build_panel
 
     return build_panel(gold.config)
+
+
+@pytest.fixture(scope="session")
+def app_snapshot_dir(tmp_path_factory):
+    """Dashboard snapshot exported from a synthetic lake (real risk pipeline, fake Gold marts)."""
+    from app_data import write_lake
+    from demandpulse.app.export import export_snapshot
+
+    store = write_lake(tmp_path_factory.mktemp("app_lake"))
+    out = tmp_path_factory.mktemp("app_snapshot")
+    export_snapshot(store, out)
+    return out
