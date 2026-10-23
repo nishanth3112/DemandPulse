@@ -1,5 +1,4 @@
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -10,17 +9,6 @@ from demandpulse.app.snapshot import APP_DATA_ENV
 
 APP_DIR = Path(app_package.__file__).parent
 TIMEOUT = 90
-
-
-@pytest.fixture(autouse=True)
-def keep_main_module():
-    """AppTest.from_file replaces `__main__` with the app script and never puts it back.
-
-    Later tests that start worker processes would re-run that script in every child.
-    """
-    original = sys.modules["__main__"]
-    yield
-    sys.modules["__main__"] = original
 
 
 @pytest.fixture(autouse=True)

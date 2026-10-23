@@ -1,3 +1,4 @@
+import sys
 import zipfile
 from pathlib import Path
 
@@ -149,3 +150,15 @@ def app_snapshot_dir(tmp_path_factory):
     out = tmp_path_factory.mktemp("app_snapshot")
     export_snapshot(store, out)
     return out
+
+
+@pytest.fixture(autouse=True)
+def restore_main_module():
+    """Streamlit's AppTest swaps `__main__` for the app script and never puts it back.
+
+    Tests that later start worker processes would then re-run that script in every child, so
+    every test gets the original module back.
+    """
+    original = sys.modules["__main__"]
+    yield
+    sys.modules["__main__"] = original
