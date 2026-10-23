@@ -28,3 +28,4 @@ mlruns/
 .DS_Store
 .vscode/
 data/work/
+data/app/

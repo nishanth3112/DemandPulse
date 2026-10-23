@@ -165,3 +165,16 @@ def test_risk_run_scores_saved_forecasts_and_writes_the_report(tmp_path, capsys)
     assert code == 0
     assert "# Revenue risk report" in capsys.readouterr().out
     assert store.exists("risk/report.md")
+
+
+def test_app_export_writes_a_snapshot_the_dashboard_can_open(tmp_path):
+    from app_data import write_lake
+    from demandpulse.app.snapshot import Snapshot
+
+    lake = tmp_path / "lake"
+    write_lake(lake)
+    out = tmp_path / "snapshot"
+
+    assert cli.main(["--local-root", str(lake), "app", "export", "--out", str(out)]) == 0
+
+    assert Snapshot(out).has("store_week")
