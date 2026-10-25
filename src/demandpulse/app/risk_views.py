@@ -20,8 +20,10 @@ TARGET_LABELS = {
     "trailing_growth": "Trailing growth: last year grown by recent network growth",
 }
 MODEL_LABELS = {
-    "ensemble": "Ensemble (seasonal naive + trailing mean + LightGBM)",
+    "ensemble": "Ensemble",
+    "ensemble_baselines": "Ensemble (baselines only)",
     "lightgbm": "LightGBM",
+    "lightgbm_v2": "LightGBM v2",
     "seasonal_naive": "Seasonal naive",
     "trailing_mean_13": "13-week trailing mean",
     "own_trend": "Own-trend baseline",

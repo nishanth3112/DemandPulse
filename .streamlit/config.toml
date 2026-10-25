@@ -1,6 +1,21 @@
 [theme]
-primaryColor = "#0F766E"
 font = "sans serif"
+baseRadius = "0.75rem"
+primaryColor = "#0F766E"
+
+[theme.light]
+primaryColor = "#0F766E"
+backgroundColor = "#F7F9FB"
+secondaryBackgroundColor = "#EAF0F4"
+textColor = "#0F172A"
+borderColor = "#D5DEE6"
+
+[theme.dark]
+primaryColor = "#2DD4BF"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#111B2E"
+textColor = "#E6EDF5"
+borderColor = "#25324A"
 
 [server]
 headless = true
@@ -8,3 +23,6 @@ runOnSave = false
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"

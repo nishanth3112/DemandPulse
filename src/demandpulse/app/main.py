@@ -6,6 +6,7 @@ from demandpulse.app import pages, ui
 
 st.set_page_config(page_title="DemandPulse", layout="wide", initial_sidebar_state="expanded")
 
+ui.inject_style()
 navigation = st.navigation(
     [
         st.Page(pages.overview, title="Executive overview", url_path="overview", default=True),
@@ -16,8 +17,6 @@ navigation = st.navigation(
     ]
 )
 with st.sidebar:
-    st.markdown("### DemandPulse")
+    ui.brand(ui.snapshot().manifest["created_at"][:10])
     ui.comparison_picker()
-    created = ui.snapshot().manifest["created_at"]
-    st.caption(f"Data snapshot exported {created[:10]}")
 navigation.run()
