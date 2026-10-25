@@ -49,6 +49,21 @@ def test_network_forecast_weeks_cover_models_runs_and_origins(app_snapshot_dir):
     assert weeks["week_start"].null_count() == 0
 
 
+def test_store_weeks_add_up_to_the_network_table(app_snapshot_dir):
+    snap = Snapshot(app_snapshot_dir)
+    weeks = snap.table("forecast_store_weeks")
+    network = snap.table("forecast_network_weeks")
+    summed = (
+        weeks.group_by("run", "model", "origin", "week_idx")
+        .agg(pl.col("actual").sum(), pl.col("forecast").sum())
+        .join(network, on=["run", "model", "origin", "week_idx"], suffix="_net")
+    )
+    assert summed.height == network.height
+    assert (summed["actual"] - summed["actual_net"]).abs().max() < 1e-6
+    assert (summed["forecast"] - summed["forecast_net"]).abs().max() < 1e-6
+    assert weeks["week_start"].null_count() == 0
+
+
 def test_forecast_summaries_from_both_runs_are_stacked_with_a_run_column(app_snapshot_dir):
     pooled = Snapshot(app_snapshot_dir).table("forecast_full_pooled")
     assert set(pooled["run"]) == {"main", "robustness"}
