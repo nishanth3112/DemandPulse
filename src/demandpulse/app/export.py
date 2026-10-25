@@ -86,29 +86,40 @@ def _store_week(store: Store, dates: pl.DataFrame, stores: pl.DataFrame) -> pl.D
     )
 
 
-def _forecast_network(store: Store, dates: pl.DataFrame) -> pl.DataFrame:
-    """Network-wide forecast and actual revenue per model, origin and week."""
+def _forecast_weeks(store: Store, dates: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Forecast and actual revenue per model, origin and week, by store and for the network.
+
+    Categories are summed away per store; the network table sums those store totals, so both
+    come from one read of each forecast file.
+    """
     frames = []
     for run in FORECAST_RUNS:
         for model in FORECAST_MODELS:
             key = f"forecast/runs/{run}/forecasts/{model}.parquet"
             if not store.exists(key):
                 continue
-            weekly = (
+            by_store = (
                 pl.read_parquet(io.BytesIO(store.read_bytes(key)))
-                .group_by(["model", "origin", "week_idx"])
+                .group_by(["model", "origin", "week_idx", "store_code"])
                 .agg(pl.col("y").sum().alias("actual"), pl.col("y_hat").sum().alias("forecast"))
                 .with_columns(pl.lit(run).alias("run"))
             )
-            frames.append(weekly)
+            frames.append(by_store)
     if not frames:
         raise FileNotFoundError("No forecast runs in the lake; run `demandpulse forecast backtest`")
-    return (
+    week_dates = dates.select("week_idx", "week_start")
+    stores = (
         pl.concat(frames)
         .with_columns(pl.col("week_idx").cast(pl.Int32))
-        .join(dates.select("week_idx", "week_start"), on="week_idx", how="left")
+        .join(week_dates, on="week_idx", how="left")
+        .sort(["run", "model", "origin", "week_idx", "store_code"])
+    )
+    network = (
+        stores.group_by(["run", "model", "origin", "week_idx", "week_start"])
+        .agg(pl.col("actual").sum(), pl.col("forecast").sum())
         .sort(["model", "origin", "week_idx"])
     )
+    return network, stores
 
 
 def _forecast_summaries(store: Store) -> dict[str, pl.DataFrame]:
@@ -142,7 +153,9 @@ def export_snapshot(store: Store, out_dir: Path) -> dict[str, Any]:
     for name, frame in gold.items():
         put(name, frame)
     put("store_week", _store_week(store, gold["dim_date"], gold["dim_store"]))
-    put("forecast_network_weeks", _forecast_network(store, gold["dim_date"]))
+    network_weeks, store_weeks = _forecast_weeks(store, gold["dim_date"])
+    put("forecast_network_weeks", network_weeks)
+    put("forecast_store_weeks", store_weeks)
     for name, frame in _forecast_summaries(store).items():
         put(name, frame)
 

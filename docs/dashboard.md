@@ -3,7 +3,7 @@
 A Streamlit app over the Gold marts, the forecast comparison and the revenue-risk outputs.
 
 ```bash
-uv run demandpulse app export                           # lake -> data/app (about 4 MB, once)
+uv run demandpulse app export                           # lake -> data/app (about 5 MB, once)
 uv run streamlit run src/demandpulse/app/main.py        # open the dashboard
 ```
 
@@ -17,8 +17,8 @@ copies a fixed list of small tables out of the lake into a local folder of Parqu
 
 - **Exported:** the Gold dimensions and marts (store scorecard, region and category benchmarks,
   revenue variance, RFM and cohorts, trading pattern, basket mix), weekly store revenue / baskets
-  / units, forecast comparison tables for the `main` and `robustness` runs, network-level
-  forecast against actual by week, and every `risk/` output.
+  / units, forecast comparison tables for the `main` and `robustness` runs, network-level and
+  per-store forecast against actual by week (store totals only, categories summed away), and every `risk/` output.
 - **Never exported:** `fct_basket` and `fct_store_category_week`. A test checks the snapshot
   contains neither, and another checks the app modules cannot import `boto3`, `duckdb`, the
   storage, ingest or warehouse layers, or mention `fct_basket`.
@@ -33,7 +33,7 @@ The export code lives in `app/export.py` and is never imported by the app itself
 |---|---|
 | Executive overview | Network revenue, like-for-like growth, baskets and basket value for a chosen comparison window; weekly trend with region/format filters; revenue bridge (traffic, basket size, price/mix, trading weeks, new and closed stores); category contribution; basket missions; trading pattern heatmap. |
 | Stores and regions | Region like-for-like growth and category mix; filterable store scorecard (region, format, like-for-like only, search); growth scatter; single-store drilldown with weekly history and revenue-driver split. |
-| Forecast accuracy | Model leaderboard per run, accuracy at series / store / category / network level, network forecast against actual for any origin and model. |
+| Forecast accuracy | Model leaderboard per run, accuracy at series / store / category / network level, network forecast against actual for any origin and model. Store explorer: pick any store (filter by region and format) and origin to see its weekly revenue history, then actual against each chosen model's forecast, with the store's WAPE and bias per model and where it ranks among all stores. |
 | Revenue risk | Hypothetical targets by origin and model; riskiest stores with probability, revenue below target and (for the backtest) what really happened; ranking evidence against the own-trend and random baselines; classifier verdict and reliability; scenario planner. |
 | Customers | RFM segments and cohort retention, stated as loyalty-card baskets only, with the loyalty share of revenue shown. |
 
@@ -63,6 +63,9 @@ error. They also run the full app entry point.
 
 ## Limitations
 
+- The store explorer shows store-level totals only. Store x category forecasts are not exported, so
+  there is no category-level series view. Stores with no revenue in the forecast weeks (closures)
+  show undefined error rates, and stores with no forecast rows are not listed.
 - The tests cover behaviour and data, not appearance. Layout, spacing and chart readability have
   not been checked in a browser by the automated tests, so look at each page when you first run it.
 - The snapshot is a point-in-time copy. Re-run `app export` after rebuilding Gold or the risk

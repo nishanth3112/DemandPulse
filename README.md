@@ -105,7 +105,7 @@ uv run demandpulse app export                      # copy the small marts and ou
 uv run streamlit run src/demandpulse/app/main.py   # executive overview, stores, forecasts, risk, customers
 ```
 
-The app reads only a local snapshot (about 4 MB) and holds no credentials; it never reads the
+The app reads only a local snapshot (about 5 MB) and holds no credentials; it never reads the
 basket fact. Pages, design and limitations are in [docs/dashboard.md](docs/dashboard.md).
 
 ## Documentation

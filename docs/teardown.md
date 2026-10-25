@@ -6,7 +6,7 @@ undone.** Nothing here has been run for you; read each step first.
 
 What you keep afterwards: the code, the docs, and `demandpulse demo`, which needs no AWS. If you
 want the dashboard to keep working on the real results, run `demandpulse app export` first. The
-snapshot it writes to `data/app/` is about 4 MB and the dashboard reads only that.
+snapshot it writes to `data/app/` is about 5 MB and the dashboard reads only that.
 
 Replace the placeholders. The pipeline's own IAM user is limited to the bucket, so steps 2 and 3
 need an administrator identity, not the `demandpulse` profile.

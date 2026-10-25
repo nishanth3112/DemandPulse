@@ -3,7 +3,15 @@
 import polars as pl
 import streamlit as st
 
-from demandpulse.app import charts, risk_charts, risk_views, ui, views
+from demandpulse.app import (
+    charts,
+    forecast_charts,
+    forecast_views,
+    risk_charts,
+    risk_views,
+    ui,
+    views,
+)
 from demandpulse.app.views import COMPARISON_LABELS
 
 K_OPTIONS = {"Top 5%": 0.05, "Top 10%": 0.10, "Top 20%": 0.20}
@@ -230,7 +238,82 @@ def forecasting() -> None:
         st.plotly_chart(risk_charts.forecast_chart(lines), width="stretch")
     else:
         st.info("Pick at least one model.")
+    _store_explorer(snap, run)
     ui.footer()
+
+
+def _store_explorer(snap, run: str) -> None:
+    st.subheader("Store explorer")
+    if "forecast_store_weeks" not in snap.manifest["tables"]:
+        st.info("This snapshot predates the store explorer. Re-run `demandpulse app export`.")
+        return
+    weeks = snap.table("forecast_store_weeks").filter(pl.col("run") == run)
+    stores_dim = snap.table("dim_store")
+    left, middle, right = st.columns(3)
+    regions = left.multiselect("Region", sorted(stores_dim["store_region"].unique().to_list()))
+    formats = middle.multiselect("Format", sorted(stores_dim["store_format"].unique().to_list()))
+    options = forecast_views.store_options(
+        stores_dim, set(weeks["store_code"].unique().to_list()), regions, formats
+    )
+    if not options:
+        st.info("No stores match these filters.")
+        return
+    store = right.selectbox("Store", options)
+    origins = sorted(weeks["origin"].unique().to_list())
+    origin_col, models_col = st.columns([1, 2])
+    origin = origin_col.selectbox("Origin (week)", origins, index=len(origins) - 1, key="explorer")
+    models = sorted(weeks["model"].unique().to_list())
+    picked = models_col.multiselect(
+        "Models to compare",
+        models,
+        default=[m for m in models if m in ("ensemble", "seasonal_naive")],
+        format_func=lambda m: risk_views.MODEL_LABELS.get(m, m),
+        key="explorer_models",
+    )
+    if not picked:
+        st.info("Pick at least one model to compare for this store.")
+        return
+    series = forecast_views.store_series(
+        weeks, snap.table("store_week"), run, origin, store, picked
+    )
+    origin_start = snap.table("dim_date").filter(pl.col("week_idx") == origin)["week_start"][0]
+    st.plotly_chart(forecast_charts.store_series_chart(series, origin_start), width="stretch")
+    st.caption(
+        "Solid line: actual weekly revenue (history, then the weeks being forecast). Dotted lines: "
+        "each model's forecast from the origin, made with data up to that week only."
+    )
+    accuracy = forecast_views.store_accuracy(weeks, run, origin, store, picked)
+    st.dataframe(
+        accuracy.select("model", "wape", "bias", "actual_total", "forecast_total"),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "model": "Model",
+            "wape": st.column_config.NumberColumn("WAPE", format="percent"),
+            "bias": st.column_config.NumberColumn("Bias", format="percent"),
+            "actual_total": st.column_config.NumberColumn("Actual revenue", format="compact"),
+            "forecast_total": st.column_config.NumberColumn("Forecast revenue", format="compact"),
+        },
+    )
+    if accuracy["wape"].null_count() == accuracy.height:
+        st.warning(
+            "This store had no revenue in the forecast weeks (for example a closure), so its "
+            "error rates are undefined."
+        )
+    reference = picked[0]
+    by_store = forecast_views.wape_by_store(weeks, run, origin, reference)
+    rank = forecast_views.store_rank(by_store, store)
+    label = risk_views.MODEL_LABELS.get(reference, reference)
+    if rank:
+        st.caption(
+            f"For {label}, this store's WAPE of {ui.pct(rank['wape'])} ranks {rank['rank']} of "
+            f"{rank['of']} stores at this origin (1 is most accurate); the median store is "
+            f"{ui.pct(rank['median_wape'])}."
+        )
+    st.plotly_chart(
+        forecast_charts.wape_distribution_chart(by_store, rank["wape"] if rank else None),
+        width="stretch",
+    )
 
 
 def risk() -> None:
