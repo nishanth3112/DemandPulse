@@ -160,7 +160,7 @@ def region_table(region_benchmark: pl.DataFrame, comparison: str) -> pl.DataFram
 
 
 def region_mix_matrix(region_category_mix: pl.DataFrame, comparison: str) -> pl.DataFrame:
-    """Mix index (1.0 = national share) by region (rows) and category (columns)."""
+    """Mix index (100 = national share) by region (rows) and category (columns)."""
     return (
         region_category_mix.filter(pl.col("comparison") == comparison)
         .sort("prod_code_30")

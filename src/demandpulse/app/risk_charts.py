@@ -3,7 +3,10 @@
 import plotly.graph_objects as go
 import polars as pl
 
-from demandpulse.app.charts import ACCENT, DOWN, MUTED, style
+from demandpulse.app.charts import ACCENT, DOWN, MODEL_COLORS, MUTED, pad_axis, style
+from demandpulse.app.risk_views import MODEL_LABELS
+
+LABEL_COLORS = {MODEL_LABELS[m]: c for m, c in MODEL_COLORS.items() if m in MODEL_LABELS}
 
 
 def forecast_chart(lines: pl.DataFrame) -> go.Figure:
@@ -13,10 +16,10 @@ def forecast_chart(lines: pl.DataFrame) -> go.Figure:
         actual = name == "Actual"
         fig.add_scatter(
             x=part["week_start"], y=part["y"], name=name, mode="lines",
-            line={"color": "#0F172A" if actual else None, "width": 3 if actual else 2,
-                  "dash": "solid" if actual else "dot"},
+            line={"color": "#0F172A" if actual else LABEL_COLORS.get(name, MUTED),
+                  "width": 3 if actual else 2, "dash": "solid" if actual else "dot"},
         )  # fmt: skip
-    fig.update_yaxes(tickformat="~s", rangemode="tozero")
+    fig.update_yaxes(tickformat="~s")
     return style(fig)
 
 
@@ -24,7 +27,8 @@ def accuracy_chart(accuracy: pl.DataFrame) -> go.Figure:
     fig = go.Figure()
     for model in accuracy["model"].unique(maintain_order=True):
         part = accuracy.filter(pl.col("model") == model)
-        fig.add_bar(x=part["level"], y=part["wape"], name=model,
+        fig.add_bar(x=part["level"], y=part["wape"], name=MODEL_LABELS.get(model, model),
+                    marker_color=MODEL_COLORS.get(model, MUTED),
                     text=[f"{v:.1%}" for v in part["wape"]], textposition="outside")  # fmt: skip
     fig.update_layout(barmode="group")
     fig.update_yaxes(title="WAPE (lower is better)", tickformat=".0%", rangemode="tozero")
@@ -42,6 +46,7 @@ def at_risk_chart(table: pl.DataFrame, top: int = 15) -> go.Figure:
             textposition="outside",
         )
     )  # fmt: skip
+    pad_axis(fig, ordered[column])
     title = "Expected revenue below target" if column == "revenue_at_risk" else "Forecast gap"
     fig.update_xaxes(title=title, tickformat="~s")
     fig.update_yaxes(type="category")

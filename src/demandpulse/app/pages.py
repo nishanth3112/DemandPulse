@@ -85,6 +85,8 @@ def overview() -> None:
             hide_index=True,
             width="stretch",
             column_config={
+                "basket_dominant_mission": "Mission",
+                "basket_type": "Basket type",
                 "revenue": None,
                 "revenue_share": st.column_config.ProgressColumn(
                     "Share of revenue", format="percent", min_value=0.0, max_value=1.0
@@ -128,7 +130,10 @@ def stores() -> None:
         st.plotly_chart(
             charts.heatmap(matrix, "Category", "Region", centered=True), width="stretch"
         )
-        st.caption("1.0 means the region buys a category at the national share.")
+        st.caption(
+            "100 means the region buys a category at the national share; 120 means 20% more. "
+            "Colours saturate at 70 and 130."
+        )
 
     st.subheader("Store scorecard")
     card = snap.table("mart_store_scorecard").filter(pl.col("comparison") == window)
@@ -144,6 +149,11 @@ def stores() -> None:
         hide_index=True,
         width="stretch",
         column_config={
+            "store_code": "Store",
+            "store_region": "Region",
+            "store_format": "Format",
+            "lifecycle": "Lifecycle",
+            "is_lfl": "Like-for-like",
             "current_revenue": st.column_config.NumberColumn("Revenue", format="compact"),
             "revenue_growth": st.column_config.NumberColumn("Revenue growth", format="percent"),
             "basket_growth": st.column_config.NumberColumn("Basket growth", format="percent"),
@@ -186,7 +196,7 @@ def forecasting() -> None:
     st.title("Forecast accuracy")
     st.caption(
         "Weekly revenue per store and category, 13 weeks ahead from rolling origins. Models see "
-        "only data up to each origin."
+        "only data up to each origin. Ensemble = seasonal naive + 13-week trailing mean + LightGBM."
     )
     tables = {n: snap.table(n) for n in snap.manifest["tables"] if n.startswith("forecast_")}
     runs = sorted(tables["forecast_full_pooled"]["run"].unique())
@@ -197,12 +207,25 @@ def forecasting() -> None:
         help="`main`: origins 78, 91, 104. `robustness`: origins 85 and 98.",
     )
     board = risk_views.model_leaderboard(tables["forecast_full_pooled"], run)
+    best = board.row(0, named=True)
+    naive = board.filter(pl.col("model") == "seasonal_naive")
+    gain = 1 - best["wape"] / naive["wape"][0] if naive.height else None
+    cards = st.columns(4)
+    cards[0].metric("Best model", risk_views.MODEL_LABELS.get(best["model"], best["model"]))
+    cards[1].metric("Its WAPE", ui.pct(best["wape"]), help="Lower is better.")
+    cards[2].metric(
+        "Error cut vs seasonal naive",
+        ui.pct(gain),
+        help="Relative reduction in WAPE against forecasting each week as last year's.",
+    )
+    cards[3].metric("Series scored", f"{best['series']:,}")
     st.subheader("Accuracy over every series and origin")
     st.dataframe(
         board.with_columns(pl.col("model").replace(risk_views.MODEL_LABELS)),
         hide_index=True,
         width="stretch",
         column_config={
+            "model": "Model",
             "wape": st.column_config.NumberColumn("WAPE", format="percent"),
             "bias": st.column_config.NumberColumn("Bias", format="percent"),
             "mase_mean": st.column_config.NumberColumn("MASE", format="%.2f"),
@@ -373,6 +396,9 @@ def risk() -> None:
                 hide_index=True,
                 width="stretch",
                 column_config={
+                    "store_code": "Store",
+                    "store_region": "Region",
+                    "store_format": "Format",
                     "target": st.column_config.NumberColumn("Target", format="compact"),
                     "forecast": st.column_config.NumberColumn("Forecast", format="compact"),
                     "forecast_shortfall": st.column_config.NumberColumn(
