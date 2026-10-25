@@ -30,6 +30,7 @@ from demandpulse.logging_setup import FORMAT_ENV, LEVEL_ENV, LOG_FORMATS, config
 from demandpulse.quality import run_quality_checks
 from demandpulse.risk.runner import PRIMARY_MODEL, TOP_K, load_store_weeks, run_risk
 from demandpulse.storage import open_store
+from demandpulse.tableau import DEFAULT_TABLEAU_DIR, export_tableau
 from demandpulse.warehouse.build import STEPS, GoldConfig, build_gold
 from demandpulse.warehouse.checks import CheckOutcome, run_checks
 
@@ -150,6 +151,14 @@ def build_parser() -> argparse.ArgumentParser:
         "export", help="copy the small marts and risk outputs the dashboard reads out of the lake"
     )
     export.add_argument("--out", type=Path, default=DEFAULT_APP_DIR)
+
+    tableau = commands.add_parser("tableau", help="CSV files for a Tableau Public workbook")
+    tableau_commands = tableau.add_subparsers(dest="tableau_command", required=True)
+    tableau_export = tableau_commands.add_parser(
+        "export", help="write tidy CSVs and a data dictionary from the dashboard snapshot"
+    )
+    tableau_export.add_argument("--snapshot", type=Path, default=DEFAULT_APP_DIR)
+    tableau_export.add_argument("--out", type=Path, default=DEFAULT_TABLEAU_DIR)
 
     risk = commands.add_parser("risk", help="revenue-risk ranking, classifier and report")
     risk_commands = risk.add_subparsers(dest="risk_command", required=True)
@@ -288,6 +297,15 @@ def _run_app(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_tableau(args: argparse.Namespace) -> int:
+    manifest = export_tableau(args.snapshot, args.out)
+    rows = sum(manifest["tables"].values())
+    logger.info(
+        "exported %d tables (%s rows) to %s", len(manifest["tables"]), f"{rows:,}", args.out
+    )
+    return 0
+
+
 def _run_risk(args: argparse.Namespace) -> int:
     settings = _settings(args)
     store = open_store(settings)
@@ -339,6 +357,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _run_risk(args)
     if args.command == "app":
         return _run_app(args)
+    if args.command == "tableau":
+        return _run_tableau(args)
     if args.command == "demo":
         return _run_demo(args)
     if args.command == "benchmark":

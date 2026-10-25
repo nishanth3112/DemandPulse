@@ -108,6 +108,9 @@ uv run streamlit run src/demandpulse/app/main.py   # executive overview, stores,
 The app reads only a local snapshot (about 5 MB) and holds no credentials; it never reads the
 basket fact. Pages, design and limitations are in [docs/dashboard.md](docs/dashboard.md).
 
+For Tableau Public, `uv run demandpulse tableau export` writes tidy CSVs from that snapshot to
+`data/tableau/`; see [docs/tableau.md](docs/tableau.md) for the files and a build guide.
+
 ## Documentation
 
 | Doc | What it covers |
@@ -116,6 +119,7 @@ basket fact. Pages, design and limitations are in [docs/dashboard.md](docs/dashb
 | [docs/data-quality.md](docs/data-quality.md) | Every check, and what the full run found |
 | [docs/model-evaluation.md](docs/model-evaluation.md) | How well each model worked and what is not established |
 | [docs/case-study.md](docs/case-study.md) | A worked business example, labelled observed, backtest, scenario and hypothetical |
+| [docs/tableau.md](docs/tableau.md) | CSV export and build guide for a Tableau Public workbook |
 | [docs/teardown.md](docs/teardown.md) | How to remove the AWS resources |
 
 ## Stack
