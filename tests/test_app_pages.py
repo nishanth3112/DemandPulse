@@ -91,6 +91,18 @@ def test_forecasting_page_compares_models_and_switches_runs():
     assert any("at least one model" in i.value for i in at.info)
 
 
+def test_store_explorer_changes_store_origin_and_handles_filters():
+    at = page("forecasting")
+    assert not at.exception
+    assert [s for s in at.subheader if s.value == "Store explorer"]
+    stores = widget(at.selectbox, "Store")
+    widget(at.selectbox, "Store").set_value(stores.options[1]).run()
+    widget(at.selectbox, "Origin (week)").set_value(78).run()
+    assert not at.exception
+    widget(at.multiselect, "Models to compare").set_value([]).run()
+    assert any("at least one model to compare" in i.value for i in at.info)
+
+
 def test_risk_page_warns_that_targets_are_hypothetical():
     at = page("risk")
     assert not at.exception

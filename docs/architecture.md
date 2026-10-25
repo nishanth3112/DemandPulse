@@ -31,7 +31,7 @@ Gold     DuckDB builds dimensions and marts from Silver, 24 validation checks (S
    |                                    revenue risk: targets, shortfall probability,
    |                                    ranking backtest, classifier, scenarios  (S3: risk/)
    v                                                         |
-snapshot export  (small marts + forecast + risk tables, about 4 MB, local)  <--+
+snapshot export  (small marts + forecast + risk tables, about 5 MB, local)  <--+
    v
 Streamlit dashboard (reads only the snapshot, no credentials)
 ```
